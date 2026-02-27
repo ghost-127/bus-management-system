@@ -1,0 +1,253 @@
+{% extends "base.html" %}
+{% block title %}Holidays — BusManag{% endblock %}
+{% block page_title %}🎉 Holiday Management{% endblock %}
+
+{% block content %}
+
+<!-- Upcoming holiday banner -->
+<div id="upcomingBanner" style="display:none;" class="card mb-6">
+    <div class="card-body" style="padding:14px 22px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+            <span style="font-size:28px;">📅</span>
+            <div>
+                <div style="font-weight:700;" id="nextHolidayName"></div>
+                <div style="font-size:12px;color:var(--text-muted);" id="nextHolidayInfo"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div style="display:flex;gap:10px;align-items:center;">
+            <div class="search-bar">
+                <span>🔍</span>
+                <input type="text" placeholder="Search holidays…" id="searchInput"
+                    oninput="filterTable('searchInput','holidayTbody')">
+            </div>
+            <select class="form-control" id="typeFilter" onchange="filterByType()" style="max-width:160px;">
+                <option value="">All Types</option>
+                <option>Holiday</option>
+                <option>No Service</option>
+                <option>Partial Service</option>
+                <option>Special</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">➕ Add Holiday</button>
+    </div>
+
+    <!-- Calendar strip of upcoming (next 30 days) -->
+    <div id="calendarStrip"
+        style="padding:16px 22px;border-bottom:1px solid var(--border);overflow-x:auto;display:flex;gap:8px;"></div>
+
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Holiday Name</th>
+                    <th>Date</th>
+                    <th>Day</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="holidayTbody">
+                <tr>
+                    <td colspan="7" style="text-align:center;padding:30px;">
+                        <div class="spinner" style="margin:auto;"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="holidayModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">Add Holiday</h3>
+            <button class="modal-close" onclick="closeModal('holidayModal')">✕</button>
+        </div>
+        <input type="hidden" id="editId">
+        <div class="form-group">
+            <label class="form-label">Holiday Name *</label>
+            <input class="form-control" id="fName" placeholder="e.g. Onam, Republic Day">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Date *</label>
+                <input class="form-control" type="date" id="fDate">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Type</label>
+                <select class="form-control" id="fType">
+                    <option value="Holiday">🎉 Holiday</option>
+                    <option value="No Service">🚫 No Service</option>
+                    <option value="Partial Service">⚠️ Partial Service</option>
+                    <option value="Special">⭐ Special</option>
+                </select>
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Description</label>
+            <input class="form-control" id="fDesc" placeholder="Optional note for students">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('holidayModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveHoliday()">Save Holiday</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let holidays = [], filteredHolidays = [];
+    const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const TYPE_STYLES = {
+        'Holiday': { badge: 'badge-success', icon: '🎉' },
+        'No Service': { badge: 'badge-danger', icon: '🚫' },
+        'Partial Service': { badge: 'badge-amber', icon: '⚠️' },
+        'Special': { badge: 'badge-blue', icon: '⭐' }
+    };
+
+    // Helper: get local YYYY-MM-DD from a Date object (avoids UTC timezone shift)
+    function localISO(d) {
+        const yr = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, '0');
+        const dy = String(d.getDate()).padStart(2, '0');
+        return `${yr}-${mo}-${dy}`;
+    }
+
+    async function load() {
+        holidays = await apiGet('/api/holidays');
+        filteredHolidays = holidays;
+        renderCalendarStrip();
+        renderUpcomingBanner();
+        renderTable();
+    }
+
+    function renderUpcomingBanner() {
+        const today = localISO(new Date());
+        const next = holidays.find(h => h.date >= today);
+        if (next) {
+            const d = new Date(next.date + 'T00:00:00');
+            document.getElementById('nextHolidayName').textContent = `${TYPE_STYLES[next.holiday_type]?.icon || '📅'}  Next Holiday: ${next.name}`;
+            document.getElementById('nextHolidayInfo').textContent = `${d.toDateString()} (${DAYS[d.getDay()]}) — ${next.holiday_type}`;
+            document.getElementById('upcomingBanner').style.display = 'block';
+        }
+    }
+
+    function renderCalendarStrip() {
+        const strip = document.getElementById('calendarStrip');
+        const today = new Date();
+        const holidayDates = new Set(holidays.map(h => h.date));
+        strip.innerHTML = Array.from({ length: 14 }, (_, i) => {
+            const d = new Date(today); d.setDate(today.getDate() + i);
+            const iso = localISO(d);   // ← use LOCAL date, not UTC, to avoid timezone shift
+            const isHol = holidayDates.has(iso);
+            const h = holidays.find(x => x.date === iso);
+            return `
+        <div style="
+            min-width:52px;text-align:center;padding:8px 6px;
+            border-radius:10px;flex-shrink:0;
+            background:${isHol ? 'rgba(239,68,68,0.15)' : 'var(--bg-card)'};
+            border:1px solid ${isHol ? 'rgba(239,68,68,0.3)' : 'var(--border)'};
+            cursor:${isHol ? 'pointer' : 'default'};"
+            title="${isHol ? h.name : ''}"
+            ${isHol ? `onclick="openEditModal(${h.id})"` : ''}>
+            <div style="font-size:10px;color:var(--text-muted);">${DAYS[d.getDay()].slice(0, 3)}</div>
+            <div style="font-size:16px;font-weight:700;color:${isHol ? '#f87171' : 'var(--text-primary)'};">${d.getDate()}</div>
+            <div style="font-size:9px;color:var(--text-muted);">${d.toLocaleString('default', { month: 'short' })}</div>
+            ${isHol ? '<div style="font-size:14px;margin-top:2px;">🚫</div>' : ''}
+        </div>`;
+        }).join('');
+    }
+
+    function filterByType() {
+        const type = document.getElementById('typeFilter').value;
+        filteredHolidays = type ? holidays.filter(h => h.holiday_type === type) : holidays;
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('holidayTbody');
+        if (!filteredHolidays.length) {
+            tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="empty-state-icon">🎉</span>No holidays added yet</div></td></tr>'; return;
+        }
+        const today = localISO(new Date());
+        tbody.innerHTML = filteredHolidays.map((h, i) => {
+            const d = new Date(h.date + 'T00:00:00');
+            const isPast = h.date < today;
+            const ts = TYPE_STYLES[h.holiday_type] || { badge: 'badge-blue', icon: '📅' };
+            return `
+        <tr style="opacity:${isPast ? 0.6 : 1}">
+            <td>${i + 1}</td>
+            <td><strong>${h.name}</strong></td>
+            <td style="font-variant-numeric:tabular-nums;">${h.date}</td>
+            <td><span class="badge badge-blue">${DAYS[d.getDay()]}</span></td>
+            <td><span class="badge ${ts.badge}">${ts.icon} ${h.holiday_type}</span></td>
+            <td style="font-size:12px;color:var(--text-muted);">${h.description || '—'}</td>
+            <td>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="openEditModal(${h.id})" title="Edit">✏️</button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteHoliday(${h.id},'${h.name}')" title="Delete">🗑️</button>
+                </div>
+            </td>
+        </tr>`;
+        }).join('');
+    }
+
+    function openAddModal() {
+        document.getElementById('modalTitle').textContent = 'Add Holiday';
+        ['editId', 'fName', 'fDesc'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('fDate').value = localISO(new Date());
+        document.getElementById('fType').value = 'Holiday';
+        openModal('holidayModal');
+    }
+
+    function openEditModal(id) {
+        const h = holidays.find(x => x.id === id);
+        if (!h) return;
+        document.getElementById('modalTitle').textContent = 'Edit Holiday';
+        document.getElementById('editId').value = h.id;
+        document.getElementById('fName').value = h.name;
+        document.getElementById('fDate').value = h.date;
+        document.getElementById('fType').value = h.holiday_type;
+        document.getElementById('fDesc').value = h.description;
+        openModal('holidayModal');
+    }
+
+    async function saveHoliday() {
+        const id = document.getElementById('editId').value;
+        const payload = {
+            name: document.getElementById('fName').value.trim(),
+            date: document.getElementById('fDate').value,
+            holiday_type: document.getElementById('fType').value,
+            description: document.getElementById('fDesc').value.trim()
+        };
+        if (!payload.name || !payload.date) { showToast('Name and date are required', 'error'); return; }
+        const res = id ? await apiPut(`/api/holidays/${id}`, payload) : await apiPost('/api/holidays', payload);
+        if (res.ok) {
+            showToast(id ? 'Holiday updated!' : 'Holiday added!', 'success');
+            closeModal('holidayModal');
+            load();
+        } else {
+            showToast(res.data.error || 'Error saving holiday', 'error');
+        }
+    }
+
+    async function deleteHoliday(id, name) {
+        confirmDelete(`Remove holiday "${name}"?`, async () => {
+            const res = await apiDelete(`/api/holidays/${id}`);
+            if (res.ok) { showToast('Holiday removed', 'success'); load(); }
+            else showToast('Error deleting holiday', 'error');
+        });
+    }
+
+    load();
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}Buses — BusManag{% endblock %}
+{% block page_title %}🚌 Available Buses{% endblock %}
+
+{% block content %}
+<div class="card mb-6">
+    <div class="card-header">
+        <div class="search-bar">
+            <span>🔍</span>
+            <input type="text" placeholder="Search buses, routes, drivers…" id="searchInput" oninput="filterBuses()">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <select class="form-control" id="statusFilter" onchange="filterBuses()" style="max-width:140px;">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="bus-grid" id="busGrid">
+    <div class="loading-overlay" style="grid-column:1/-1;">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allBuses = [];
+
+    async function loadBuses() {
+        allBuses = await apiGet('/api/buses');
+        renderBuses(allBuses);
+    }
+
+    function filterBuses() {
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        const status = document.getElementById('statusFilter').value;
+        let filtered = allBuses.filter(b => {
+            const match = (b.bus_no + b.route_name + b.driver_name).toLowerCase().includes(q);
+            const statusMatch = !status || b.status === status;
+            return match && statusMatch;
+        });
+        renderBuses(filtered);
+    }
+
+    function renderBuses(buses) {
+        const grid = document.getElementById('busGrid');
+        if (buses.length === 0) {
+            grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span class="empty-state-icon">🚌</span><p>No buses found</p></div>';
+            return;
+        }
+        grid.innerHTML = buses.map(b => `
+        <div class="bus-card" onclick="window.location='/student/route/${b.id}'">
+            <div class="bus-card-header">
+                <div class="bus-number">${b.bus_no}</div>
+                ${b.status === 'active'
+                ? '<span class="badge badge-success">● Active</span>'
+                : '<span class="badge badge-danger">● Inactive</span>'}
+            </div>
+            <div class="bus-route">🗺️ ${b.route_name}</div>
+            <div class="bus-meta">
+                <div class="bus-meta-item">👤 ${b.driver_name}</div>
+                <div class="bus-meta-item">💺 ${b.capacity} seats</div>
+            </div>
+            <div style="margin-top:16px;">
+                <span class="btn btn-secondary btn-sm" style="width:100%;justify-content:center;">View Route & Stops →</span>
+            </div>
+        </div>`).join('');
+    }
+
+    loadBuses();
+</script>
+{% endblock %}

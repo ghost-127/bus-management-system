@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Route Details — College Bus Management{% endblock %}
+{% block page_title %}🗺️ Route Details — {{ bus.bus_no }}{% endblock %}
+
+{% block content %}
+
+<!-- Compact Bus Info Strip -->
+<div class="card mb-6" style="padding:0;">
+    <div style="padding:14px 22px;display:flex;align-items:center;flex-wrap:wrap;gap:16px;" id="busInfoInner">
+        <div class="spinner" style="margin:auto;"></div>
+    </div>
+</div>
+
+<!-- Main Layout: Stops (wide) + Timings (compact sticky panel) -->
+<div style="display:grid;grid-template-columns:1fr 280px;gap:20px;align-items:start;">
+
+    <!-- Full Stop Timeline -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">📍 All Stops</div>
+            <span id="stopCount" class="badge badge-blue"></span>
+        </div>
+        <div class="card-body" style="padding:10px 0;">
+            <div class="timeline" id="stopTimeline">
+                <div class="loading-overlay">
+                    <div class="spinner"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Compact Weekly Timings Panel -->
+    <div class="card" style="position:sticky;top:20px;">
+        <div class="card-header">
+            <div class="card-title">⏰ Timings</div>
+        </div>
+        <div id="timingsTable" style="padding:0 16px 16px;">
+            <div class="loading-overlay">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .info-chip {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 20px;
+        padding: 5px 12px;
+        white-space: nowrap;
+    }
+
+    .info-chip strong {
+        color: var(--text-primary);
+    }
+</style>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const busId = {{ bus.id }};
+
+    async function loadData() {
+        const [busData, routes, timings] = await Promise.all([
+            apiGet('/api/buses').then(bs => bs.find(b => b.id === busId)),
+            apiGet('/api/routes'),
+            apiGet(`/api/timings?bus_id=${busId}`)
+        ]);
+
+        const route = routes.find(r => r.bus_id === busId);
+
+        // ── Compact info strip ──
+        document.getElementById('busInfoInner').innerHTML = `
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div style="width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:18px;">🚌</div>
+                <span style="font-weight:800;font-size:17px;">${busData?.bus_no || '—'}</span>
+                ${statusBadge(busData?.status || 'active')}
+            </div>
+            <div class="info-chip">👤 <strong>${busData?.driver_name || 'Unassigned'}</strong></div>
+            <div class="info-chip">🪑 <strong>${busData?.capacity || '—'}</strong> seats</div>
+            <div class="info-chip">🗺️ <strong>${route?.name || 'No route'}</strong></div>
+            <div class="info-chip">📍 <strong>${route?.start_point || '—'}</strong> → <strong>${route?.end_point || '—'}</strong></div>
+            <div class="info-chip">📏 <strong>${route?.distance_km || '—'} km</strong></div>
+        `;
+
+        // ── Weekly timings (compact) ──
+        const timingsEl = document.getElementById('timingsTable');
+        if (!timings.length) {
+            timingsEl.innerHTML = '<div class="empty-state" style="padding:20px;"><span class="empty-state-icon" style="font-size:30px;">⏰</span>No timings</div>';
+        } else {
+            timingsEl.innerHTML = timings.map(t => `
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">
+                    <span style="font-size:12px;font-weight:600;color:var(--text-secondary);">${t.day_of_week.slice(0, 3)}</span>
+                    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px;">
+                        <span class="stop-time-chip">🟢 <span>${t.departure_time}</span></span>
+                        <span class="stop-time-chip">🔴 <span>${t.arrival_time}</span></span>
+                    </div>
+                </div>`).join('');
+        }
+
+        // ── Stop timeline ──
+        if (route) {
+            const stops = await apiGet(`/api/stops?route_id=${route.id}`);
+            document.getElementById('stopCount').textContent = `${stops.length} stops`;
+            const timeline = document.getElementById('stopTimeline');
+            if (!stops.length) {
+                timeline.innerHTML = '<div class="empty-state"><span class="empty-state-icon">📍</span>No stops defined</div>';
+            } else {
+                timeline.innerHTML = stops.map((s, i) => {
+                    const dotClass = i === 0 ? 'first' : (i === stops.length - 1 ? 'last' : 'mid');
+                    return `
+                    <div class="stop-item" style="padding:16px 24px;">
+                        <div class="stop-dot ${dotClass}">${s.sequence}</div>
+                        <div class="stop-info">
+                            <div class="stop-name" style="font-size:15px;">${s.name}</div>
+                            ${s.landmark ? `<div class="stop-landmark">📌 ${s.landmark}</div>` : ''}
+                            <div class="stop-times" style="margin-top:8px;">
+                                ${s.arrival_time ? `<div class="stop-time-chip">Arr: <span>${s.arrival_time}</span></div>` : ''}
+                                ${s.departure_time ? `<div class="stop-time-chip">Dep: <span>${s.departure_time}</span></div>` : ''}
+                            </div>
+                        </div>
+                    </div>`;
+                }).join('');
+            }
+        } else {
+            document.getElementById('stopTimeline').innerHTML = '<div class="empty-state"><span class="empty-state-icon">🗺️</span>No route assigned</div>';
+        }
+    }
+
+    loadData();
+</script>
+{% endblock %}

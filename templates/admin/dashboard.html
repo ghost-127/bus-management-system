@@ -1,0 +1,500 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard — BusManag{% endblock %}
+{% block page_title %}{% endblock %}
+
+{% block content %}
+<style>
+    /* ── Admin Hero ── */
+    .adm-hero {
+        position: relative;
+        border-radius: 20px;
+        padding: 34px 40px;
+        margin-bottom: 24px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #1a0a2e 0%, #0f172a 50%, #0a1628 100%);
+        border: 1px solid rgba(139, 92, 246, 0.25);
+        min-height: 155px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 20px;
+    }
+
+    .adm-hero::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background:
+            radial-gradient(circle at 85% 50%, rgba(139, 92, 246, 0.28) 0%, transparent 55%),
+            radial-gradient(circle at 10% 80%, rgba(239, 68, 68, 0.12) 0%, transparent 50%);
+        pointer-events: none;
+    }
+
+    .adm-hero::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-image: radial-gradient(rgba(139, 92, 246, 0.18) 1px, transparent 1px);
+        background-size: 28px 28px;
+        pointer-events: none;
+        opacity: 0.6;
+    }
+
+    .hero-text {
+        position: relative;
+        z-index: 1;
+    }
+
+    .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(139, 92, 246, 0.2);
+        border: 1px solid rgba(139, 92, 246, 0.3);
+        color: #c4b5fd;
+        border-radius: 20px;
+        padding: 3px 12px;
+        font-size: 11px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+
+    .hero-name {
+        font-size: 28px;
+        font-weight: 800;
+        color: #f1f5f9;
+        margin-bottom: 5px;
+        line-height: 1.1;
+    }
+
+    .hero-sub {
+        font-size: 12px;
+        color: #94a3b8;
+    }
+
+    .hero-icon-wrap {
+        position: relative;
+        z-index: 1;
+        font-size: 64px;
+        animation: heroPulse 3s ease-in-out infinite alternate;
+        filter: drop-shadow(0 0 20px rgba(139, 92, 246, 0.5));
+    }
+
+    @keyframes heroPulse {
+        from {
+            transform: scale(0.95) rotate(-3deg);
+        }
+
+        to {
+            transform: scale(1.05) rotate(3deg);
+        }
+    }
+
+    /* ── Stat Pills ── */
+    .stat-pills {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-bottom: 24px;
+    }
+
+    @media (max-width: 700px) {
+        .stat-pills {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .stat-pill {
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 16px 20px;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        backdrop-filter: blur(10px);
+        transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s, border-color 0.3s;
+        animation: pilIn 0.6s cubic-bezier(0.34, 1.5, 0.64, 1) both;
+        text-decoration: none;
+        color: inherit;
+    }
+
+    .stat-pill:hover {
+        transform: translateY(-5px) scale(1.03);
+        box-shadow: 0 12px 32px rgba(139, 92, 246, 0.18);
+        border-color: rgba(139, 92, 246, 0.3);
+    }
+
+    .stat-pill:nth-child(1) {
+        animation-delay: .05s
+    }
+
+    .stat-pill:nth-child(2) {
+        animation-delay: .10s
+    }
+
+    .stat-pill:nth-child(3) {
+        animation-delay: .15s
+    }
+
+    .stat-pill:nth-child(4) {
+        animation-delay: .20s
+    }
+
+    .stat-pill:nth-child(5) {
+        animation-delay: .25s
+    }
+
+    .stat-pill:nth-child(6) {
+        animation-delay: .30s
+    }
+
+    @keyframes pilIn {
+        from {
+            opacity: 0;
+            transform: scale(0.82) translateY(14px);
+        }
+
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
+    }
+
+    .pill-icon-box {
+        width: 42px;
+        height: 42px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 20px;
+        flex-shrink: 0;
+    }
+
+    .pill-val {
+        font-size: 24px;
+        font-weight: 800;
+        color: var(--text-primary);
+        line-height: 1;
+    }
+
+    .pill-lbl {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 500;
+        margin-top: 2px;
+    }
+
+    .pill-sub {
+        font-size: 10px;
+        color: #34d399;
+        font-weight: 600;
+        margin-top: 1px;
+    }
+
+    /* ── Quick Actions ── */
+    .quick-actions {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-bottom: 24px;
+    }
+
+    .qa-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 7px;
+        padding: 9px 16px;
+        border-radius: 10px;
+        background: var(--bg-card);
+        border: 1px solid var(--border);
+        color: var(--text-secondary);
+        font-size: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s, border-color 0.2s, color 0.2s;
+    }
+
+    .qa-btn:hover {
+        transform: translateY(-3px) scale(1.04);
+        background: rgba(139, 92, 246, 0.1);
+        border-color: rgba(139, 92, 246, 0.3);
+        color: #c4b5fd;
+    }
+
+    .qa-icon {
+        font-size: 16px;
+    }
+
+    /* ── Bento ── */
+    .bento {
+        display: grid;
+        grid-template-columns: 1.2fr 1fr;
+        gap: 20px;
+    }
+
+    @media (max-width:700px) {
+        .bento {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    /* ── Fleet rows ── */
+    .fleet-row {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr 1fr 1fr;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.2s;
+        gap: 8px;
+    }
+
+    .fleet-row:hover {
+        background: rgba(139, 92, 246, 0.06);
+    }
+
+    .fleet-head {
+        display: grid;
+        grid-template-columns: 1.4fr 1fr 1fr 1fr;
+        padding: 8px 16px;
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: var(--text-muted);
+        border-bottom: 1px solid var(--border);
+        background: rgba(255, 255, 255, 0.02);
+        gap: 8px;
+    }
+
+    .bus-no-cell {
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--text-primary);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .cell {
+        font-size: 12px;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    /* ── Driver cards ── */
+    .driver-card {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 13px 16px;
+        border-bottom: 1px solid var(--border);
+        transition: background 0.2s;
+    }
+
+    .driver-card:hover {
+        background: rgba(139, 92, 246, 0.05);
+    }
+
+    .driver-avatar {
+        width: 38px;
+        height: 38px;
+        border-radius: 10px;
+        background: linear-gradient(135deg, #7c3aed, #06b6d4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        font-weight: 800;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    .driver-name {
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--text-primary);
+    }
+
+    .driver-phone {
+        font-size: 11px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+</style>
+
+<!-- Admin Hero -->
+<div class="adm-hero">
+    <div class="hero-text">
+        <div class="hero-badge">👑 Admin Control Center</div>
+        <div class="hero-name">{{ current_user.name.split()[0] }}</div>
+        <div class="hero-sub" id="heroTime">—</div>
+    </div>
+    <div class="hero-icon-wrap">⚙️</div>
+</div>
+
+<!-- 6 Stat Pills (2×3 grid) -->
+<div class="stat-pills">
+    <div class="stat-pill">
+        <div class="pill-icon-box" style="background:rgba(99,102,241,0.18);">🚌</div>
+        <div>
+            <div class="pill-val" id="sBuses">—</div>
+            <div class="pill-lbl">Buses</div>
+            <div class="pill-sub" id="sActiveBuses"></div>
+        </div>
+    </div>
+    <div class="stat-pill">
+        <div class="pill-icon-box" style="background:rgba(6,182,212,0.18);">🗺️</div>
+        <div>
+            <div class="pill-val" id="sRoutes">—</div>
+            <div class="pill-lbl">Routes</div>
+        </div>
+    </div>
+    <div class="stat-pill">
+        <div class="pill-icon-box" style="background:rgba(16,185,129,0.18);">📍</div>
+        <div>
+            <div class="pill-val" id="sStops">—</div>
+            <div class="pill-lbl">Stops</div>
+        </div>
+    </div>
+    <div class="stat-pill">
+        <div class="pill-icon-box" style="background:rgba(245,158,11,0.18);">👤</div>
+        <div>
+            <div class="pill-val" id="sDrivers">—</div>
+            <div class="pill-lbl">Drivers</div>
+            <div class="pill-sub" id="sActiveDrivers"></div>
+        </div>
+    </div>
+    <div class="stat-pill">
+        <div class="pill-icon-box" style="background:rgba(139,92,246,0.18);">🎓</div>
+        <div>
+            <div class="pill-val" id="sStudents">—</div>
+            <div class="pill-lbl">Students</div>
+        </div>
+    </div>
+    <div class="stat-pill">
+        <div class="pill-icon-box" style="background:rgba(239,68,68,0.18);">👑</div>
+        <div>
+            <div class="pill-val" id="sAdmins">—</div>
+            <div class="pill-lbl">Admins</div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="quick-actions">
+    <a class="qa-btn" href="/admin/buses"> <span class="qa-icon">🚌</span> Add Bus</a>
+    <a class="qa-btn" href="/admin/routes"> <span class="qa-icon">🗺️</span> Add Route</a>
+    <a class="qa-btn" href="/admin/drivers"> <span class="qa-icon">👤</span> Add Driver</a>
+    <a class="qa-btn" href="/admin/timings"> <span class="qa-icon">⏰</span> Set Timings</a>
+    <a class="qa-btn" href="/admin/holidays"> <span class="qa-icon">🎉</span> Add Holiday</a>
+    <a class="qa-btn" href="/admin/users"> <span class="qa-icon">👥</span> Manage Users</a>
+</div>
+
+<!-- Bento: Fleet + Drivers -->
+<div class="bento">
+
+    <!-- Bus Fleet -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">🚌 Bus Fleet</div>
+            <a href="/admin/buses" class="btn btn-primary btn-sm">Manage</a>
+        </div>
+        <div class="fleet-head">
+            <div>Bus No.</div>
+            <div>Driver</div>
+            <div>Route</div>
+            <div>Status</div>
+        </div>
+        <div id="fleetList">
+            <div style="text-align:center;padding:28px;">
+                <div class="spinner" style="margin:auto;"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Drivers -->
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">👤 Drivers</div>
+            <a href="/admin/drivers" class="btn btn-secondary btn-sm">Manage</a>
+        </div>
+        <div id="driverList">
+            <div style="text-align:center;padding:28px;">
+                <div class="spinner" style="margin:auto;"></div>
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    /* Live clock */
+    function tick() {
+        const now = new Date();
+        const t = now.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
+        const d = now.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+        document.getElementById('heroTime').textContent = `${t}  ·  ${d}`;
+    }
+    tick(); setInterval(tick, 1000);
+
+    async function loadData() {
+        const [stats, buses, drivers] = await Promise.all([
+            apiGet('/api/stats'),
+            apiGet('/api/buses'),
+            apiGet('/api/drivers')
+        ]);
+
+        document.getElementById('sBuses').textContent = stats.buses;
+        document.getElementById('sRoutes').textContent = stats.routes;
+        document.getElementById('sStops').textContent = stats.stops;
+        document.getElementById('sDrivers').textContent = stats.drivers;
+        document.getElementById('sStudents').textContent = stats.students;
+        document.getElementById('sAdmins').textContent = stats.admins;
+        document.getElementById('sActiveBuses').textContent = `${stats.active_buses} active`;
+        document.getElementById('sActiveDrivers').textContent = `${stats.active_drivers} active`;
+
+        /* ── Fleet ── */
+        const fleetEl = document.getElementById('fleetList');
+        if (!buses.length) {
+            fleetEl.innerHTML = '<div class="empty-state"><span class="empty-state-icon">🚌</span>No buses yet</div>';
+        } else {
+            fleetEl.innerHTML = buses.slice(0, 8).map(b => `
+              <div class="fleet-row">
+                <div class="bus-no-cell">🚌 ${b.bus_no}</div>
+                <div class="cell">${b.driver_name || '—'}</div>
+                <div class="cell">${b.route_name || '—'}</div>
+                <div>${statusBadge(b.status)}</div>
+              </div>`).join('');
+        }
+
+        /* ── Drivers ── */
+        const driverEl = document.getElementById('driverList');
+        if (!drivers.length) {
+            driverEl.innerHTML = '<div class="empty-state"><span class="empty-state-icon">👤</span>No drivers yet</div>';
+        } else {
+            driverEl.innerHTML = drivers.slice(0, 8).map(d => `
+              <div class="driver-card">
+                <div class="driver-avatar">${d.name.charAt(0).toUpperCase()}</div>
+                <div style="flex:1;min-width:0;">
+                  <div class="driver-name">${d.name}</div>
+                  <div class="driver-phone">📞 ${d.phone || '—'}</div>
+                </div>
+                <div>${statusBadge(d.status)}</div>
+              </div>`).join('');
+        }
+    }
+    loadData();
+</script>
+{% endblock %}

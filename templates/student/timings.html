@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Bus Timings — BusManag{% endblock %}
+{% block page_title %}⏰ Bus Timings{% endblock %}
+
+{% block content %}
+<div class="card mb-6">
+    <div class="card-header">
+        <div class="card-title">Filter Timetable</div>
+        <div style="display:flex;gap:10px;">
+            <select class="form-control" id="dayFilter" onchange="renderTable()" style="max-width:160px;">
+                <option value="">All Days</option>
+                <option>Monday</option>
+                <option>Tuesday</option>
+                <option>Wednesday</option>
+                <option>Thursday</option>
+                <option>Friday</option>
+                <option>Saturday</option>
+            </select>
+            <select class="form-control" id="busFilter" onchange="renderTable()" style="max-width:180px;">
+                <option value="">All Buses</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">📅 Full Timetable</div>
+    </div>
+    <div class="card-body" style="padding:0;">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Bus No.</th>
+                        <th>Day</th>
+                        <th>Departure</th>
+                        <th>Arrival</th>
+                        <th>Notes</th>
+                    </tr>
+                </thead>
+                <tbody id="timingsTbody">
+                    <tr>
+                        <td colspan="5" style="text-align:center;padding:30px;">
+                            <div class="spinner" style="margin:0 auto;"></div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allTimings = [], allBuses = [];
+
+    async function loadData() {
+        [allTimings, allBuses] = await Promise.all([
+            apiGet('/api/timings'),
+            apiGet('/api/buses')
+        ]);
+
+        // Populate bus filter
+        const busFilter = document.getElementById('busFilter');
+        allBuses.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.id; opt.textContent = b.bus_no;
+            busFilter.appendChild(opt);
+        });
+
+        // Pre-select today
+        const TODAY = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date().getDay()];
+        document.getElementById('dayFilter').value = TODAY;
+
+        renderTable();
+    }
+
+    function renderTable() {
+        const day = document.getElementById('dayFilter').value;
+        const busId = document.getElementById('busFilter').value;
+
+        let filtered = allTimings.filter(t => {
+            const dayMatch = !day || t.day_of_week === day;
+            const busMatch = !busId || String(t.bus_id) === busId;
+            return dayMatch && busMatch;
+        });
+
+        const tbody = document.getElementById('timingsTbody');
+        if (filtered.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><span class="empty-state-icon">⏰</span>No timings found</div></td></tr>';
+            return;
+        }
+        tbody.innerHTML = filtered.map(t => `
+        <tr>
+            <td><strong>🚌 ${t.bus_no}</strong></td>
+            <td><span class="badge badge-blue">${t.day_of_week}</span></td>
+            <td><span class="stop-time-chip">🟢 <span>${t.departure_time}</span></span></td>
+            <td><span class="stop-time-chip">🔴 <span>${t.arrival_time}</span></span></td>
+            <td style="color:var(--text-muted)">${t.notes || '—'}</td>
+        </tr>`).join('');
+    }
+
+    loadData();
+</script>
+{% endblock %}

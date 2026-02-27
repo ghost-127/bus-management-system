@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block title %}Manage Timings — BusManag{% endblock %}
+{% block page_title %}⏰ Timing Management{% endblock %}
+
+{% block content %}
+<div class="card mb-4">
+    <div class="card-header">
+        <div style="display:flex;gap:10px;align-items:center;">
+            <select class="form-control" id="busFilter" onchange="loadTimings()" style="max-width:200px;">
+                <option value="">All Buses</option>
+            </select>
+            <select class="form-control" id="dayFilter" onchange="filterDays()" style="max-width:160px;">
+                <option value="">All Days</option>
+                <option>Monday</option>
+                <option>Tuesday</option>
+                <option>Wednesday</option>
+                <option>Thursday</option>
+                <option>Friday</option>
+                <option>Saturday</option>
+            </select>
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">➕ Add Timing</button>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Bus</th>
+                    <th>Day</th>
+                    <th>Departure</th>
+                    <th>Arrival</th>
+                    <th>Notes</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="timingTbody">
+                <tr>
+                    <td colspan="7" style="text-align:center;padding:30px;">
+                        <div class="spinner" style="margin:auto;"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="timingModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">Add Timing</h3>
+            <button class="modal-close" onclick="closeModal('timingModal')">✕</button>
+        </div>
+        <input type="hidden" id="editId">
+        <div class="form-group">
+            <label class="form-label">Bus *</label>
+            <select class="form-control" id="fBus">
+                <option value="">Select Bus</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Day of Week *</label>
+            <select class="form-control" id="fDay">
+                <option>Monday</option>
+                <option>Tuesday</option>
+                <option>Wednesday</option>
+                <option>Thursday</option>
+                <option>Friday</option>
+                <option>Saturday</option>
+                <option>Sunday</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Departure Time *</label>
+                <input class="form-control" type="time" id="fDep">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Arrival Time *</label>
+                <input class="form-control" type="time" id="fArr">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Notes</label>
+            <input class="form-control" id="fNotes" placeholder="Optional notes">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('timingModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveTiming()">Save Timing</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let timings = [], filteredTimings = [], buses = [];
+
+    async function init() {
+        buses = await apiGet('/api/buses');
+        const bf = document.getElementById('busFilter');
+        const fb = document.getElementById('fBus');
+        buses.forEach(b => {
+            bf.innerHTML += `<option value="${b.id}">${b.bus_no}</option>`;
+            fb.innerHTML += `<option value="${b.id}">${b.bus_no}</option>`;
+        });
+        loadTimings();
+    }
+
+    async function loadTimings() {
+        const bid = document.getElementById('busFilter').value;
+        const url = bid ? `/api/timings?bus_id=${bid}` : '/api/timings';
+        timings = await apiGet(url);
+        filteredTimings = timings;
+        filterDays();
+    }
+
+    function filterDays() {
+        const day = document.getElementById('dayFilter').value;
+        filteredTimings = day ? timings.filter(t => t.day_of_week === day) : timings;
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('timingTbody');
+        if (!filteredTimings.length) {
+            tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="empty-state-icon">⏰</span>No timings found</div></td></tr>'; return;
+        }
+        tbody.innerHTML = filteredTimings.map((t, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td><strong>🚌 ${t.bus_no}</strong></td>
+            <td><span class="badge badge-blue">${t.day_of_week}</span></td>
+            <td><span class="stop-time-chip">🟢 <span>${t.departure_time}</span></span></td>
+            <td><span class="stop-time-chip">🔴 <span>${t.arrival_time}</span></span></td>
+            <td style="color:var(--text-muted);font-size:12px;">${t.notes || '—'}</td>
+            <td>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="openEdit(${t.id})" title="Edit">✏️</button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteTiming(${t.id})" title="Delete">🗑️</button>
+                </div>
+            </td>
+        </tr>`).join('');
+    }
+
+    function openAddModal() {
+        document.getElementById('modalTitle').textContent = 'Add Timing';
+        ['editId', 'fDep', 'fArr', 'fNotes'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('fBus').value = document.getElementById('busFilter').value || '';
+        openModal('timingModal');
+    }
+
+    function openEdit(id) {
+        const t = timings.find(x => x.id === id);
+        document.getElementById('modalTitle').textContent = 'Edit Timing';
+        document.getElementById('editId').value = t.id;
+        document.getElementById('fBus').value = t.bus_id;
+        document.getElementById('fDay').value = t.day_of_week;
+        document.getElementById('fDep').value = t.departure_time;
+        document.getElementById('fArr').value = t.arrival_time;
+        document.getElementById('fNotes').value = t.notes || '';
+        openModal('timingModal');
+    }
+
+    async function saveTiming() {
+        const id = document.getElementById('editId').value;
+        const payload = {
+            bus_id: document.getElementById('fBus').value,
+            day_of_week: document.getElementById('fDay').value,
+            departure_time: document.getElementById('fDep').value,
+            arrival_time: document.getElementById('fArr').value,
+            notes: document.getElementById('fNotes').value
+        };
+        if (!payload.bus_id || !payload.departure_time || !payload.arrival_time) {
+            showToast('Please fill all required fields', 'error'); return;
+        }
+        const res = id ? await apiPut(`/api/timings/${id}`, payload) : await apiPost('/api/timings', payload);
+        if (res.ok) { showToast(id ? 'Timing updated!' : 'Timing added!', 'success'); closeModal('timingModal'); loadTimings(); }
+        else showToast('Error saving timing', 'error');
+    }
+
+    async function deleteTiming(id) {
+        confirmDelete('Delete this timing?', async () => {
+            const res = await apiDelete(`/api/timings/${id}`);
+            if (res.ok) { showToast('Timing deleted', 'success'); loadTimings(); }
+        });
+    }
+
+    init();
+</script>
+{% endblock %}

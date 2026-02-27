@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}Manage Users — BusManag{% endblock %}
+{% block page_title %}👥 User Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <div class="search-bar">
+                <span>🔍</span>
+                <input type="text" placeholder="Search users…" id="searchInput"
+                    oninput="filterTable('searchInput','userTbody')">
+            </div>
+            <select class="form-control" id="roleFilter" onchange="filterRole()" style="max-width:140px;">
+                <option value="">All Roles</option>
+                <option value="student">Students</option>
+                <option value="admin">Admins</option>
+            </select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <span id="userCount" class="badge badge-blue"></span>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Reg. No.</th>
+                    <th>Role</th>
+                    <th>Joined</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="userTbody">
+                <tr>
+                    <td colspan="7" style="text-align:center;padding:30px;">
+                        <div class="spinner" style="margin:auto;"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Role Change Confirm Banner (visible as inline) -->
+<div class="modal-backdrop" id="roleModal">
+    <div class="modal" style="max-width:400px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Change User Role</h3>
+            <button class="modal-close" onclick="closeModal('roleModal')">✕</button>
+        </div>
+        <div style="padding:10px 0;">
+            <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;" id="roleModalMsg"></p>
+            <div class="form-group">
+                <label class="form-label">New Role</label>
+                <select class="form-control" id="newRole">
+                    <option value="student">Student</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('roleModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="applyRoleChange()">Apply Change</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let users = [], filteredUsers = [], pendingRoleUserId = null;
+
+    async function load() {
+        users = await apiGet('/api/users');
+        filteredUsers = users;
+        filterRole();
+    }
+
+    function filterRole() {
+        const role = document.getElementById('roleFilter').value;
+        filteredUsers = role ? users.filter(u => u.role === role) : users;
+        renderTable();
+    }
+
+    function renderTable() {
+        document.getElementById('userCount').textContent = `${filteredUsers.length} users`;
+        const tbody = document.getElementById('userTbody');
+        if (!filteredUsers.length) {
+            tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="empty-state-icon">👥</span>No users found</div></td></tr>'; return;
+        }
+        tbody.innerHTML = filteredUsers.map((u, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">
+                        ${u.name[0].toUpperCase()}
+                    </div>
+                    <strong>${u.name}</strong>
+                </div>
+            </td>
+            <td style="font-size:12px;color:var(--text-muted);">${u.email}</td>
+            <td style="font-size:12px;">${u.reg_no || '—'}</td>
+            <td>${roleBadge(u.role)}</td>
+            <td style="font-size:12px;color:var(--text-muted);">${u.created_at}</td>
+            <td>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm" onclick="openRoleModal(${u.id},'${u.name}','${u.role}')" title="Change Role">
+                        ${u.role === 'student' ? '👑 Make Admin' : '🎓 Make Student'}
+                    </button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser(${u.id},'${u.name}')" title="Delete">🗑️</button>
+                </div>
+            </td>
+        </tr>`).join('');
+    }
+
+    function openRoleModal(id, name, currentRole) {
+        pendingRoleUserId = id;
+        document.getElementById('roleModalMsg').textContent =
+            `Change role for "${name}" (currently: ${currentRole.charAt(0).toUpperCase() + currentRole.slice(1)})`;
+        document.getElementById('newRole').value = currentRole === 'student' ? 'admin' : 'student';
+        openModal('roleModal');
+    }
+
+    async function applyRoleChange() {
+        const newRole = document.getElementById('newRole').value;
+        const res = await apiPut(`/api/users/${pendingRoleUserId}/role`, { role: newRole });
+        if (res.ok) {
+            showToast(`User promoted to ${newRole}!`, 'success');
+            closeModal('roleModal');
+            load();
+        } else {
+            showToast(res.data.error || 'Error changing role', 'error');
+        }
+    }
+
+    async function deleteUser(id, name) {
+        confirmDelete(`Delete user "${name}"? This cannot be undone.`, async () => {
+            const res = await apiDelete(`/api/users/${id}`);
+            if (res.ok) { showToast('User deleted', 'success'); load(); }
+            else showToast(res.data.error || 'Error deleting user', 'error');
+        });
+    }
+
+    load();
+</script>
+{% endblock %}

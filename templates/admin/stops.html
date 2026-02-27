@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block title %}Route Stops — College Bus Management{% endblock %}
+{% block page_title %}📍 Stops by Route{% endblock %}
+
+{% block content %}
+<!-- Add/Edit Stop Modal -->
+<div class="modal-backdrop" id="stopModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">Add Stop</h3>
+            <button class="modal-close" onclick="closeModal('stopModal')">✕</button>
+        </div>
+        <input type="hidden" id="editId">
+        <div class="form-group">
+            <label class="form-label">Route *</label>
+            <select class="form-control" id="fRoute">
+                <option value="">Select Route</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Stop Name *</label>
+                <input class="form-control" id="fName" placeholder="e.g. City Park">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Sequence *</label>
+                <input class="form-control" type="number" id="fSeq" placeholder="1" min="1">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Arrival Time</label>
+                <input class="form-control" type="time" id="fArrival">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Departure Time</label>
+                <input class="form-control" type="time" id="fDeparture">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Landmark</label>
+            <input class="form-control" id="fLandmark" placeholder="Nearby landmark or description">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('stopModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveStop()">Save Stop</button>
+        </div>
+    </div>
+</div>
+
+<!-- Route cards with all stops -->
+<div id="routeCards">
+    <div class="loading-overlay" style="height:200px;">
+        <div class="spinner"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let routes = [];
+    let stopsMap = {};  // flat id -> stop object for fast lookup
+
+    async function init() {
+        routes = await apiGet('/api/routes/with-stops');
+
+        // Build flat stops map — avoids any type-mismatch lookup bug
+        stopsMap = {};
+        routes.forEach(r => {
+            (r.stops || []).forEach(s => {
+                stopsMap[String(s.id)] = { ...s, route_id: r.id };
+            });
+        });
+
+        // Populate route select
+        document.getElementById('fRoute').innerHTML =
+            '<option value="">Select Route</option>' +
+            routes.map(r => `<option value="${r.id}">${r.name} (${r.bus_no || ''})</option>`).join('');
+
+        renderRouteCards();
+    }
+
+    function renderRouteCards() {
+        const container = document.getElementById('routeCards');
+        if (!routes.length) {
+            container.innerHTML = '<div class="empty-state"><span class="empty-state-icon">📍</span>No routes found. Add a route first.</div>';
+            return;
+        }
+        container.innerHTML = routes.map(r => `
+        <div class="card mb-6">
+            <div class="card-header">
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-size:18px;">🚌</div>
+                    <div>
+                        <div style="font-weight:700;font-size:15px;">${r.name}</div>
+                        <div style="font-size:12px;color:var(--text-muted);">Bus ${r.bus_no || '—'} &nbsp;|&nbsp; 📍 ${r.start_point} → ${r.end_point} &nbsp;|&nbsp; ${r.distance_km} km</div>
+                    </div>
+                </div>
+                <button class="btn btn-primary btn-sm" onclick="openAddModal(${r.id})">➕ Add Stop</button>
+            </div>
+            <div>
+                ${(r.stops || []).length === 0
+                ? '<div class="empty-state" style="padding:24px;"><span class="empty-state-icon">📍</span>No stops added yet</div>'
+                : renderStopsTimeline(r.stops, r.id)
+            }
+            </div>
+        </div>`).join('');
+    }
+
+    function renderStopsTimeline(stops, routeId) {
+        return `
+    <div style="padding:20px 24px;">
+        <div class="timeline">
+            ${stops.map((s, i) => {
+            const dotClass = i === 0 ? 'first' : (i === stops.length - 1 ? 'last' : 'mid');
+            // Use data-sid attribute to avoid any inline JS quoting issues
+            return `
+                <div class="stop-item">
+                    <div class="stop-dot ${dotClass}">${s.sequence}</div>
+                    <div class="stop-info" style="display:flex;justify-content:space-between;align-items:flex-start;">
+                        <div>
+                            <div class="stop-name">${s.name}</div>
+                            ${s.landmark ? `<div class="stop-landmark">📌 ${s.landmark}</div>` : ''}
+                            <div class="stop-times" style="margin-top:6px;">
+                                ${s.arrival_time ? `<div class="stop-time-chip">Arr: <span>${s.arrival_time}</span></div>` : ''}
+                                ${s.departure_time ? `<div class="stop-time-chip">Dep: <span>${s.departure_time}</span></div>` : ''}
+                            </div>
+                        </div>
+                        <div style="display:flex;gap:6px;padding-top:6px;">
+                            <button class="btn btn-secondary btn-sm btn-icon"
+                                data-sid="${s.id}" data-rid="${routeId}"
+                                onclick="openEditModal(this.dataset.sid)" title="Edit">✏️</button>
+                            <button class="btn btn-danger btn-sm btn-icon"
+                                data-sid="${s.id}"
+                                onclick="deleteStop(this.dataset.sid, this.dataset.name)"
+                                data-name="${(s.name || '').replace(/"/g, '&quot;')}"
+                                title="Delete">🗑️</button>
+                        </div>
+                    </div>
+                </div>`;
+        }).join('')}
+        </div>
+    </div>`;
+    }
+
+    function openAddModal(routeId) {
+        document.getElementById('modalTitle').textContent = 'Add Stop';
+        ['editId', 'fName', 'fSeq', 'fArrival', 'fDeparture', 'fLandmark'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('fRoute').value = routeId || '';
+        openModal('stopModal');
+    }
+
+    function openEditModal(sidStr) {
+        const stop = stopsMap[String(sidStr)];
+        if (!stop) {
+            showToast('Stop data not found. Please refresh.', 'error');
+            return;
+        }
+        document.getElementById('modalTitle').textContent = 'Edit Stop';
+        document.getElementById('editId').value = stop.id;
+        document.getElementById('fRoute').value = stop.route_id;
+        document.getElementById('fName').value = stop.name;
+        document.getElementById('fSeq').value = stop.sequence;
+        document.getElementById('fArrival').value = stop.arrival_time || '';
+        document.getElementById('fDeparture').value = stop.departure_time || '';
+        document.getElementById('fLandmark').value = stop.landmark || '';
+        openModal('stopModal');
+    }
+
+    async function saveStop() {
+        const id = document.getElementById('editId').value;
+        const payload = {
+            route_id: document.getElementById('fRoute').value,
+            name: document.getElementById('fName').value.trim(),
+            sequence: parseInt(document.getElementById('fSeq').value) || 1,
+            arrival_time: document.getElementById('fArrival').value || null,
+            departure_time: document.getElementById('fDeparture').value || null,
+            landmark: document.getElementById('fLandmark').value.trim()
+        };
+        if (!payload.route_id || !payload.name) { showToast('Route and Stop name are required', 'error'); return; }
+        const res = id ? await apiPut(`/api/stops/${id}`, payload) : await apiPost('/api/stops', payload);
+        if (res.ok) {
+            showToast(id ? 'Stop updated!' : 'Stop added!', 'success');
+            closeModal('stopModal');
+            init();
+        } else {
+            showToast(res.data.error || 'Error saving stop', 'error');
+        }
+    }
+
+    async function deleteStop(sid, name) {
+        confirmDelete(`Delete stop "${name}"?`, async () => {
+            const res = await apiDelete(`/api/stops/${sid}`);
+            if (res.ok) { showToast('Stop deleted', 'success'); init(); }
+            else showToast('Error deleting stop', 'error');
+        });
+    }
+
+    init();
+</script>
+{% endblock %}

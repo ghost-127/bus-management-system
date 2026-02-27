@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Manage Drivers — BusManag{% endblock %}
+{% block page_title %}👤 Driver Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div class="search-bar">
+            <span>🔍</span>
+            <input type="text" placeholder="Search drivers…" id="searchInput"
+                oninput="filterTable('searchInput','driverTbody')">
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">➕ Add Driver</button>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>License No.</th>
+                    <th>Phone</th>
+                    <th>Experience</th>
+                    <th>Buses</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="driverTbody">
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:30px;">
+                        <div class="spinner" style="margin:auto;"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="driverModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">Add Driver</h3>
+            <button class="modal-close" onclick="closeModal('driverModal')">✕</button>
+        </div>
+        <input type="hidden" id="editId">
+        <div class="form-group">
+            <label class="form-label">Full Name *</label>
+            <input class="form-control" id="fName" placeholder="e.g. Rajan Kumar">
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">License Number *</label>
+                <input class="form-control" id="fLicense" placeholder="e.g. KL01-2021-001">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Phone *</label>
+                <input class="form-control" id="fPhone" placeholder="e.g. 9876543210" type="tel">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Experience (years)</label>
+                <input class="form-control" type="number" id="fExp" placeholder="0" min="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select class="form-control" id="fStatus">
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                </select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('driverModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveDriver()">Save Driver</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let drivers = [];
+
+    async function load() {
+        drivers = await apiGet('/api/drivers');
+        renderTable();
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('driverTbody');
+        if (!drivers.length) {
+            tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><span class="empty-state-icon">👤</span>No drivers added</div></td></tr>'; return;
+        }
+        tbody.innerHTML = drivers.map((d, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td><strong>${d.name}</strong></td>
+            <td style="font-family:monospace;font-size:12px;">${d.license_no}</td>
+            <td>${d.phone}</td>
+            <td>${d.experience_years} yrs</td>
+            <td><span class="badge badge-blue">${d.bus_count} bus${d.bus_count !== 1 ? 'es' : ''}</span></td>
+            <td>${statusBadge(d.status)}</td>
+            <td>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="openEdit(${d.id})" title="Edit">✏️</button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteDriver(${d.id},'${d.name}')" title="Delete">🗑️</button>
+                </div>
+            </td>
+        </tr>`).join('');
+    }
+
+    function openAddModal() {
+        document.getElementById('modalTitle').textContent = 'Add Driver';
+        ['editId', 'fName', 'fLicense', 'fPhone', 'fExp'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('fStatus').value = 'active';
+        openModal('driverModal');
+    }
+
+    function openEdit(id) {
+        const d = drivers.find(x => x.id === id);
+        document.getElementById('modalTitle').textContent = 'Edit Driver';
+        document.getElementById('editId').value = d.id;
+        document.getElementById('fName').value = d.name;
+        document.getElementById('fLicense').value = d.license_no;
+        document.getElementById('fPhone').value = d.phone;
+        document.getElementById('fExp').value = d.experience_years;
+        document.getElementById('fStatus').value = d.status;
+        openModal('driverModal');
+    }
+
+    async function saveDriver() {
+        const id = document.getElementById('editId').value;
+        const payload = {
+            name: document.getElementById('fName').value.trim(),
+            license_no: document.getElementById('fLicense').value.trim(),
+            phone: document.getElementById('fPhone').value.trim(),
+            experience_years: document.getElementById('fExp').value || 0,
+            status: document.getElementById('fStatus').value
+        };
+        if (!payload.name || !payload.license_no || !payload.phone) {
+            showToast('Name, License No., and Phone are required', 'error'); return;
+        }
+        const res = id ? await apiPut(`/api/drivers/${id}`, payload) : await apiPost('/api/drivers', payload);
+        if (res.ok) { showToast(id ? 'Driver updated!' : 'Driver added!', 'success'); closeModal('driverModal'); load(); }
+        else showToast(res.data.error || 'Error saving driver', 'error');
+    }
+
+    async function deleteDriver(id, name) {
+        confirmDelete(`Delete driver "${name}"?`, async () => {
+            const res = await apiDelete(`/api/drivers/${id}`);
+            if (res.ok) { showToast('Driver deleted', 'success'); load(); }
+            else showToast('Error deleting driver', 'error');
+        });
+    }
+
+    load();
+</script>
+{% endblock %}

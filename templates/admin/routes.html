@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Manage Routes — BusManag{% endblock %}
+{% block page_title %}🗺️ Route Management{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div class="card-header">
+        <div class="search-bar">
+            <span>🔍</span>
+            <input type="text" placeholder="Search routes…" id="searchInput"
+                oninput="filterTable('searchInput','routeTbody')">
+        </div>
+        <button class="btn btn-primary" onclick="openAddModal()">➕ Add Route</button>
+    </div>
+    <div class="table-wrapper">
+        <table>
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Route Name</th>
+                    <th>Bus</th>
+                    <th>From</th>
+                    <th>To</th>
+                    <th>Distance</th>
+                    <th>Stops</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="routeTbody">
+                <tr>
+                    <td colspan="8" style="text-align:center;padding:30px;">
+                        <div class="spinner" style="margin:auto;"></div>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Modal -->
+<div class="modal-backdrop" id="routeModal">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 class="modal-title" id="modalTitle">Add Route</h3>
+            <button class="modal-close" onclick="closeModal('routeModal')">✕</button>
+        </div>
+        <input type="hidden" id="editId">
+        <div class="form-group">
+            <label class="form-label">Route Name *</label>
+            <input class="form-control" id="fName" placeholder="e.g. City Centre Route">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Assign Bus *</label>
+            <select class="form-control" id="fBus">
+                <option value="">Select Bus</option>
+            </select>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Start Point *</label>
+                <input class="form-control" id="fStart" placeholder="e.g. College Gate">
+            </div>
+            <div class="form-group">
+                <label class="form-label">End Point *</label>
+                <input class="form-control" id="fEnd" placeholder="e.g. City Centre">
+            </div>
+        </div>
+        <div class="form-group">
+            <label class="form-label">Distance (km)</label>
+            <input class="form-control" type="number" id="fDist" placeholder="0" step="0.1">
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('routeModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="saveRoute()">Save Route</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let routes = [], buses = [];
+
+    async function load() {
+        [routes, buses] = await Promise.all([apiGet('/api/routes'), apiGet('/api/buses')]);
+        renderBusOptions();
+        renderTable();
+    }
+
+    function renderBusOptions(selected = '') {
+        document.getElementById('fBus').innerHTML =
+            '<option value="">Select Bus</option>' +
+            buses.map(b => `<option value="${b.id}" ${b.id == selected ? 'selected' : ''}>${b.bus_no}</option>`).join('');
+    }
+
+    function renderTable() {
+        const tbody = document.getElementById('routeTbody');
+        if (!routes.length) {
+            tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><span class="empty-state-icon">🗺️</span>No routes added</div></td></tr>'; return;
+        }
+        tbody.innerHTML = routes.map((r, i) => `
+        <tr>
+            <td>${i + 1}</td>
+            <td><strong>${r.name}</strong></td>
+            <td><span class="badge badge-blue">🚌 ${r.bus_no}</span></td>
+            <td>📍 ${r.start_point}</td>
+            <td>🏁 ${r.end_point}</td>
+            <td>${r.distance_km} km</td>
+            <td><span class="badge badge-amber">${r.stop_count} stops</span></td>
+            <td>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn btn-secondary btn-sm btn-icon" onclick="openEdit(${r.id})" title="Edit">✏️</button>
+                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteRoute(${r.id},'${r.name}')" title="Delete">🗑️</button>
+                </div>
+            </td>
+        </tr>`).join('');
+    }
+
+    function openAddModal() {
+        document.getElementById('modalTitle').textContent = 'Add New Route';
+        ['editId', 'fName', 'fStart', 'fEnd', 'fDist'].forEach(id => document.getElementById(id).value = '');
+        renderBusOptions();
+        openModal('routeModal');
+    }
+
+    function openEdit(id) {
+        const r = routes.find(x => x.id === id);
+        document.getElementById('modalTitle').textContent = 'Edit Route';
+        document.getElementById('editId').value = r.id;
+        document.getElementById('fName').value = r.name;
+        document.getElementById('fStart').value = r.start_point;
+        document.getElementById('fEnd').value = r.end_point;
+        document.getElementById('fDist').value = r.distance_km;
+        renderBusOptions(r.bus_id);
+        openModal('routeModal');
+    }
+
+    async function saveRoute() {
+        const id = document.getElementById('editId').value;
+        const payload = {
+            name: document.getElementById('fName').value.trim(),
+            bus_id: document.getElementById('fBus').value,
+            start_point: document.getElementById('fStart').value.trim(),
+            end_point: document.getElementById('fEnd').value.trim(),
+            distance_km: document.getElementById('fDist').value || 0
+        };
+        if (!payload.name || !payload.bus_id || !payload.start_point || !payload.end_point) {
+            showToast('Please fill all required fields', 'error'); return;
+        }
+        const res = id ? await apiPut(`/api/routes/${id}`, payload) : await apiPost('/api/routes', payload);
+        if (res.ok) { showToast(id ? 'Route updated!' : 'Route added!', 'success'); closeModal('routeModal'); load(); }
+        else showToast(res.data.error || 'Error saving route', 'error');
+    }
+
+    async function deleteRoute(id, name) {
+        confirmDelete(`Delete route "${name}"? This will also delete all its stops.`, async () => {
+            const res = await apiDelete(`/api/routes/${id}`);
+            if (res.ok) { showToast('Route deleted', 'success'); load(); }
+            else showToast('Error deleting route', 'error');
+        });
+    }
+
+    load();
+</script>
+{% endblock %}
