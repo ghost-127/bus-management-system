@@ -12,8 +12,10 @@ class User(UserMixin, db.Model):
     name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(256), nullable=False)
-    role = db.Column(db.String(20), default='student')  # 'student' or 'admin'
+    role = db.Column(db.String(20), default='student')  # 'student', 'admin', 'incharge'
+    assigned_bus_id = db.Column(db.Integer, db.ForeignKey('buses.id'), nullable=True)  # for incharge only
     reg_no = db.Column(db.String(50), nullable=True)
+    is_fee_paid = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password):
@@ -29,6 +31,8 @@ class User(UserMixin, db.Model):
             'email': self.email,
             'role': self.role,
             'reg_no': self.reg_no,
+            'assigned_bus_id': self.assigned_bus_id,
+            'is_fee_paid': self.is_fee_paid,
             'created_at': self.created_at.strftime('%Y-%m-%d')
         }
 
@@ -58,8 +62,9 @@ class Driver(db.Model):
 class Bus(db.Model):
     __tablename__ = 'buses'
     id = db.Column(db.Integer, primary_key=True)
-    bus_no = db.Column(db.String(20), unique=True, nullable=False)
-    capacity = db.Column(db.Integer, default=40)
+    bus_no = db.Column(db.String(50), unique=True, nullable=False)
+    capacity = db.Column(db.Integer, nullable=False)
+    bus_type = db.Column(db.String(20), default='regular')  # 'regular' or 'event'
     status = db.Column(db.String(20), default='active')
     driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
     routes = db.relationship('Route', backref='bus', lazy=True)
@@ -72,9 +77,10 @@ class Bus(db.Model):
             'id': self.id,
             'bus_no': self.bus_no,
             'capacity': self.capacity,
+            'bus_type': self.bus_type,
             'status': self.status,
             'driver_id': self.driver_id,
-            'driver_name': driver_name,
+            'driver_name': self.driver.name if self.driver else 'Unassigned',
             'route_name': route_name
         }
 
@@ -164,3 +170,58 @@ class Holiday(db.Model):
             'description': self.description or ''
         }
 
+
+
+class ChangeRequest(db.Model):
+    __tablename__ = 'change_requests'
+    id           = db.Column(db.Integer, primary_key=True)
+    incharge_id  = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    bus_id       = db.Column(db.Integer, db.ForeignKey('buses.id'), nullable=False)
+    request_type = db.Column(db.String(30), nullable=False)
+    description  = db.Column(db.Text, nullable=False)
+    status       = db.Column(db.String(20), default='pending')
+    admin_notes  = db.Column(db.String(300), nullable=True)
+    created_at   = db.Column(db.DateTime, default=datetime.utcnow)
+
+    incharge = db.relationship('User', foreign_keys=[incharge_id])
+    bus      = db.relationship('Bus',  foreign_keys=[bus_id])
+
+    def to_dict(self):
+        return {
+            'id':            self.id,
+            'incharge_id':   self.incharge_id,
+            'incharge_name': self.incharge.name if self.incharge else u'—',
+            'bus_id':        self.bus_id,
+            'bus_no':        self.bus.bus_no if self.bus else u'—',
+            'request_type':  self.request_type,
+            'description':   self.description,
+            'status':        self.status,
+            'admin_notes':   self.admin_notes or '',
+            'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M')
+        }
+
+
+class Notification(db.Model):
+    __tablename__ = 'notifications'
+    id            = db.Column(db.Integer, primary_key=True)
+    title         = db.Column(db.String(150), nullable=False)
+    message       = db.Column(db.Text, nullable=False)
+    sender_id     = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    target_bus_id = db.Column(db.Integer, db.ForeignKey('buses.id'), nullable=True)
+    created_at    = db.Column(db.DateTime, default=datetime.utcnow)
+
+    sender     = db.relationship('User', foreign_keys=[sender_id])
+    target_bus = db.relationship('Bus',  foreign_keys=[target_bus_id])
+
+    def to_dict(self):
+        return {
+            'id':            self.id,
+            'title':         self.title,
+            'message':       self.message,
+            'sender_id':     self.sender_id,
+            'sender_name':   self.sender.name if self.sender else u'—',
+            'sender_role':   self.sender.role if self.sender else u'—',
+            'target_bus_id': self.target_bus_id,
+            'target_bus_no': self.target_bus.bus_no if self.target_bus else 'All Students',
+            'created_at':    self.created_at.strftime('%Y-%m-%d %H:%M')
+        }

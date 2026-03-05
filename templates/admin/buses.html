@@ -19,6 +19,7 @@
                     <th>#</th>
                     <th>Bus No.</th>
                     <th>Capacity</th>
+                    <th>Bus Type</th>
                     <th>Driver</th>
                     <th>Route</th>
                     <th>Status</th>
@@ -53,57 +54,70 @@
                 <label class="form-label">Capacity</label>
                 <input class="form-control" type="number" id="fCapacity" placeholder="40" min="1">
             </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Type</label>
+                    <select class="form-control" id="fBusType">
+                        <option value="regular">Regular</option>
+                        <option value="event">Event</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Status</label>
+                    <select class="form-control" id="fStatus">
+                        <option value="active">Active</option>
+                        <option value="inactive">Inactive</option>
+                    </select>
+                </div>
+            </div>
             <div class="form-group">
-                <label class="form-label">Status</label>
-                <select class="form-control" id="fStatus">
-                    <option value="active">Active</option>
-                    <option value="inactive">Inactive</option>
+                <label class="form-label">Assign Driver</label>
+                <select class="form-control" id="fDriver">
+                    <option value="">Unassigned</option>
                 </select>
             </div>
-        </div>
-        <div class="form-group">
-            <label class="form-label">Assign Driver</label>
-            <select class="form-control" id="fDriver">
-                <option value="">Unassigned</option>
-            </select>
-        </div>
-        <div class="modal-footer">
-            <button class="btn btn-secondary" onclick="closeModal('busModal')">Cancel</button>
-            <button class="btn btn-primary" onclick="saveBus()">Save Bus</button>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeModal('busModal')">Cancel</button>
+                <button class="btn btn-primary" onclick="saveBus()">Save Bus</button>
+            </div>
         </div>
     </div>
-</div>
-{% endblock %}
+    {% endblock %}
 
-{% block scripts %}
-<script>
-    let buses = [], drivers = [];
+    {% block scripts %}
+    <script>
+        let buses = [], drivers = [];
 
-    async function load() {
-        [buses, drivers] = await Promise.all([apiGet('/api/buses'), apiGet('/api/drivers')]);
-        renderDriverOptions();
-        renderTable();
-    }
-
-    function renderDriverOptions(selected = '') {
-        const sel = document.getElementById('fDriver');
-        sel.innerHTML = '<option value="">Unassigned</option>' +
-            drivers.map(d => `<option value="${d.id}" ${d.id == selected ? 'selected' : ''}>${d.name}</option>`).join('');
-    }
-
-    function renderTable() {
-        const tbody = document.getElementById('busTbody');
-        if (!buses.length) {
-            tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="empty-state-icon">🚌</span>No buses added yet</div></td></tr>';
-            return;
+        async function load() {
+            [buses, drivers] = await Promise.all([apiGet('/api/buses'), apiGet('/api/drivers')]);
+            renderDriverOptions();
+            renderTable();
         }
-        tbody.innerHTML = buses.map((b, i) => `
+
+        function renderDriverOptions(selected = '') {
+            const sel = document.getElementById('fDriver');
+            sel.innerHTML = '<option value="">Unassigned</option>' +
+                drivers.map(d => `<option value="${d.id}" ${d.id == selected ? 'selected' : ''}>${d.name}</option>`).join('');
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('busTbody');
+            if (!buses.length) {
+                tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="empty-state-icon">🚌</span>No buses added yet</div></td></tr>';
+                return;
+            }
+            tbody.innerHTML = buses.map((b, i) => `
         <tr>
             <td>${i + 1}</td>
             <td><strong>${b.bus_no}</strong></td>
-            <td>💺 ${b.capacity}</td>
+            <td>${b.capacity} seats</td>
+            <td>
+                ${b.bus_type === 'event'
+                    ? '<span class="badge badge-purple">Event</span>'
+                    : '<span class="badge badge-blue">Regular</span>'}
+            </td>
             <td>${b.driver_name}</td>
-            <td>${b.route_name}</td>
+            <td>${b.route_name || '—'}</td>
             <td>${statusBadge(b.status)}</td>
             <td>
                 <div style="display:flex;gap:6px;">
@@ -112,59 +126,62 @@
                 </div>
             </td>
         </tr>`).join('');
-    }
-
-    function openAddModal() {
-        document.getElementById('modalTitle').textContent = 'Add New Bus';
-        document.getElementById('editId').value = '';
-        document.getElementById('fBusNo').value = '';
-        document.getElementById('fCapacity').value = '40';
-        document.getElementById('fStatus').value = 'active';
-        renderDriverOptions();
-        openModal('busModal');
-    }
-
-    function openEditModal(id) {
-        const b = buses.find(x => x.id === id);
-        if (!b) return;
-        document.getElementById('modalTitle').textContent = 'Edit Bus';
-        document.getElementById('editId').value = b.id;
-        document.getElementById('fBusNo').value = b.bus_no;
-        document.getElementById('fCapacity').value = b.capacity;
-        document.getElementById('fStatus').value = b.status;
-        renderDriverOptions(b.driver_id);
-        openModal('busModal');
-    }
-
-    async function saveBus() {
-        const id = document.getElementById('editId').value;
-        const payload = {
-            bus_no: document.getElementById('fBusNo').value.trim(),
-            capacity: document.getElementById('fCapacity').value,
-            status: document.getElementById('fStatus').value,
-            driver_id: document.getElementById('fDriver').value || null
-        };
-        if (!payload.bus_no) { showToast('Bus number is required', 'error'); return; }
-        const res = id
-            ? await apiPut(`/api/buses/${id}`, payload)
-            : await apiPost('/api/buses', payload);
-        if (res.ok) {
-            showToast(id ? 'Bus updated!' : 'Bus added!', 'success');
-            closeModal('busModal');
-            load();
-        } else {
-            showToast(res.data.error || 'Error saving bus', 'error');
         }
-    }
 
-    async function deleteBus(id, name) {
-        confirmDelete(`Delete bus ${name}?`, async () => {
-            const res = await apiDelete(`/api/buses/${id}`);
-            if (res.ok) { showToast('Bus deleted', 'success'); load(); }
-            else showToast(res.data.error || 'Error deleting bus', 'error');
-        });
-    }
+        function openAddModal() {
+            document.getElementById('modalTitle').textContent = 'Add New Bus';
+            document.getElementById('editId').value = '';
+            document.getElementById('fBusNo').value = '';
+            document.getElementById('fCapacity').value = '40';
+            document.getElementById('fBusType').value = 'regular';
+            document.getElementById('fStatus').value = 'active';
+            renderDriverOptions();
+            openModal('busModal');
+        }
 
-    load();
-</script>
-{% endblock %}
+        function openEditModal(id) {
+            const b = buses.find(x => x.id === id);
+            if (!b) return;
+            document.getElementById('modalTitle').textContent = 'Edit Bus';
+            document.getElementById('editId').value = b.id;
+            document.getElementById('fBusNo').value = b.bus_no;
+            document.getElementById('fCapacity').value = b.capacity;
+            document.getElementById('fBusType').value = b.bus_type || 'regular';
+            document.getElementById('fStatus').value = b.status;
+            renderDriverOptions(b.driver_id);
+            openModal('busModal');
+        }
+
+        async function saveBus() {
+            const id = document.getElementById('editId').value;
+            const payload = {
+                bus_no: document.getElementById('fBusNo').value.trim(),
+                capacity: document.getElementById('fCapacity').value,
+                bus_type: document.getElementById('fBusType').value,
+                status: document.getElementById('fStatus').value,
+                driver_id: document.getElementById('fDriver').value || null
+            };
+            if (!payload.bus_no) { showToast('Bus number is required', 'error'); return; }
+            const res = id
+                ? await apiPut(`/api/buses/${id}`, payload)
+                : await apiPost('/api/buses', payload);
+            if (res.ok) {
+                showToast(id ? 'Bus updated!' : 'Bus added!', 'success');
+                closeModal('busModal');
+                load();
+            } else {
+                showToast(res.data.error || 'Error saving bus', 'error');
+            }
+        }
+
+        async function deleteBus(id, name) {
+            confirmDelete(`Delete bus ${name}?`, async () => {
+                const res = await apiDelete(`/api/buses/${id}`);
+                if (res.ok) { showToast('Bus deleted', 'success'); load(); }
+                else showToast(res.data.error || 'Error deleting bus', 'error');
+            });
+        }
+
+        load();
+    </script>
+    {% endblock %}

@@ -3,6 +3,21 @@
 {% block page_title %}🚌 Available Buses{% endblock %}
 
 {% block content %}
+{% set is_paid = current_user.is_fee_paid %}
+{% if not is_paid %}
+<div
+    style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:12px; padding:16px; margin-bottom:24px; display:flex; gap:12px; align-items:flex-start;">
+    <div style="font-size:24px;">⚠️</div>
+    <div>
+        <h4 style="color:#f87171; margin:0 0 4px 0; font-size:15px;">Fee Payment Required</h4>
+        <p style="color:var(--text-secondary); margin:0; font-size:13px; line-height:1.4;">
+            Your bus fee pass has expired or is unpaid. You are currently only able to view and access <strong>Event
+                Buses</strong>. Please contact the administration to renew your regular bus pass.
+        </p>
+    </div>
+</div>
+{% endif %}
+
 <div class="card mb-6">
     <div class="card-header">
         <div class="search-bar">
@@ -55,7 +70,12 @@
         grid.innerHTML = buses.map(b => `
         <div class="bus-card" onclick="window.location='/student/route/${b.id}'">
             <div class="bus-card-header">
-                <div class="bus-number">${b.bus_no}</div>
+                <div>
+                    <div class="bus-number">${b.bus_no}</div>
+                    ${b.bus_type === 'event'
+                ? '<span class="badge badge-purple" style="margin-top:4px;display:inline-block;">Event Bus</span>'
+                : ''}
+                </div>
                 ${b.status === 'active'
                 ? '<span class="badge badge-success">● Active</span>'
                 : '<span class="badge badge-danger">● Inactive</span>'}

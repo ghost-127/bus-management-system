@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Change Requests — BusManag{% endblock %}
+{% block page_title %}📝 Change Requests{% endblock %}
+
+{% block content %}
+<style>
+    .req-type-pill {
+        display: inline-block;
+        border-radius: 6px;
+        padding: 2px 9px;
+        font-size: 11px;
+        font-weight: 700;
+    }
+</style>
+
+<!-- Submit Form -->
+<div class="card" style="margin-bottom:20px;">
+    <div class="card-header">
+        <div class="card-title">➕ Submit New Request</div>
+    </div>
+    <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+            <div>
+                <label
+                    style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">Request
+                    Type</label>
+                <select id="reqType" class="form-control">
+                    <option value="stop">Stop Change</option>
+                    <option value="timing">Timing Change</option>
+                    <option value="route">Route Change</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div style="grid-column:1/-1;">
+                <label
+                    style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:6px;">Description</label>
+                <textarea id="reqDesc" class="form-control" rows="3"
+                    placeholder="Describe what you want changed and why…" style="resize:vertical;"></textarea>
+            </div>
+        </div>
+        <button onclick="submitRequest()" class="btn btn-primary">Submit Request</button>
+        <div id="reqMsg" style="margin-top:10px;font-size:13px;"></div>
+    </div>
+</div>
+
+<!-- Requests Table -->
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">📋 My Past Requests</div>
+    </div>
+    <div class="card-body" style="padding:0;">
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                        <th>Admin Notes</th>
+                        <th>Date</th>
+                    </tr>
+                </thead>
+                <tbody id="reqTbody">
+                    <tr>
+                        <td colspan="5" style="text-align:center;padding:20px;">
+                            <div class="spinner" style="margin:auto;"></div>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const TYPE_COLORS = { stop: '#06b6d4', timing: '#f59e0b', route: '#8b5cf6', other: '#94a3b8' };
+
+    function reqStatusBadge(s) {
+        const c = { pending: '#f59e0b', approved: '#10b981', rejected: '#ef4444' };
+        return `<span style="background:${c[s] || '#6366f1'}22;color:${c[s] || '#6366f1'};border:1px solid ${c[s] || '#6366f1'}44;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;">${s}</span>`;
+    }
+
+    async function loadRequests() {
+        const reqs = await apiGet('/api/change-requests');
+        const tbody = document.getElementById('reqTbody');
+        if (!reqs.length) {
+            tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state" style="padding:24px"><span class="empty-state-icon">📝</span>No requests yet</div></td></tr>';
+            return;
+        }
+        tbody.innerHTML = reqs.map(r => `
+    <tr>
+      <td><span class="req-type-pill" style="background:${TYPE_COLORS[r.request_type] || '#6366f1'}22;color:${TYPE_COLORS[r.request_type] || '#6366f1'};">${r.request_type}</span></td>
+      <td style="max-width:280px;">${r.description}</td>
+      <td>${reqStatusBadge(r.status)}</td>
+      <td style="font-size:12px;color:var(--text-muted);">${r.admin_notes || '—'}</td>
+      <td style="font-size:11px;color:var(--text-muted);white-space:nowrap;">${r.created_at}</td>
+    </tr>`).join('');
+    }
+
+    async function submitRequest() {
+        const desc = document.getElementById('reqDesc').value.trim();
+        const type = document.getElementById('reqType').value;
+        const msgEl = document.getElementById('reqMsg');
+        if (!desc) { msgEl.style.color = '#f87171'; msgEl.textContent = 'Please describe your request.'; return; }
+        msgEl.textContent = 'Submitting…';
+        const res = await fetch('/api/change-requests', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ request_type: type, description: desc })
+        });
+        if (res.ok) {
+            msgEl.style.color = '#34d399'; msgEl.textContent = '✅ Request submitted!';
+            document.getElementById('reqDesc').value = '';
+            loadRequests();
+        } else {
+            const d = await res.json(); msgEl.style.color = '#f87171'; msgEl.textContent = d.error || 'Error submitting.';
+        }
+    }
+
+    loadRequests();
+</script>
+{% endblock %}

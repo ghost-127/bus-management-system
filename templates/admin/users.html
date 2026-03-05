@@ -11,10 +11,11 @@
                 <input type="text" placeholder="Search users…" id="searchInput"
                     oninput="filterTable('searchInput','userTbody')">
             </div>
-            <select class="form-control" id="roleFilter" onchange="filterRole()" style="max-width:140px;">
+            <select class="form-control" id="roleFilter" onchange="filterRole()" style="max-width:150px;">
                 <option value="">All Roles</option>
                 <option value="student">Students</option>
                 <option value="admin">Admins</option>
+                <option value="incharge">Incharges</option>
             </select>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
@@ -30,13 +31,15 @@
                     <th>Email</th>
                     <th>Reg. No.</th>
                     <th>Role</th>
+                    <th>Assigned Bus</th>
+                    <th>Fee Status</th>
                     <th>Joined</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="userTbody">
                 <tr>
-                    <td colspan="7" style="text-align:center;padding:30px;">
+                    <td colspan="8" style="text-align:center;padding:30px;">
                         <div class="spinner" style="margin:auto;"></div>
                     </td>
                 </tr>
@@ -45,9 +48,9 @@
     </div>
 </div>
 
-<!-- Role Change Confirm Banner (visible as inline) -->
+<!-- Role Change Modal -->
 <div class="modal-backdrop" id="roleModal">
-    <div class="modal" style="max-width:400px;">
+    <div class="modal" style="max-width:440px;">
         <div class="modal-header">
             <h3 class="modal-title">Change User Role</h3>
             <button class="modal-close" onclick="closeModal('roleModal')">✕</button>
@@ -56,10 +59,18 @@
             <p style="color:var(--text-secondary);font-size:13px;margin-bottom:16px;" id="roleModalMsg"></p>
             <div class="form-group">
                 <label class="form-label">New Role</label>
-                <select class="form-control" id="newRole">
+                <select class="form-control" id="newRole" onchange="onRoleChange()">
                     <option value="student">Student</option>
+                    <option value="incharge">Bus Incharge</option>
                     <option value="admin">Admin</option>
                 </select>
+            </div>
+            <div class="form-group" id="busAssignGroup" style="display:none;margin-top:12px;">
+                <label class="form-label">Assign Bus</label>
+                <select class="form-control" id="assignedBus">
+                    <option value="">— No bus —</option>
+                </select>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Required for Bus Incharge role</div>
             </div>
         </div>
         <div class="modal-footer">
@@ -68,14 +79,23 @@
         </div>
     </div>
 </div>
+
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-    let users = [], filteredUsers = [], pendingRoleUserId = null;
+    let users = [], filteredUsers = [], allBuses = [], pendingRoleUserId = null;
 
     async function load() {
-        users = await apiGet('/api/users');
+        [users, allBuses] = await Promise.all([apiGet('/api/users'), apiGet('/api/buses')]);
+        // Populate bus dropdown
+        const sel = document.getElementById('assignedBus');
+        allBuses.forEach(b => {
+            const o = document.createElement('option');
+            o.value = b.id; o.textContent = `${b.bus_no} — ${b.route_name}`;
+            sel.appendChild(o);
+        });
         filteredUsers = users;
         filterRole();
     }
@@ -86,11 +106,36 @@
         renderTable();
     }
 
+    function busLabel(busId) {
+        if (!busId) return '—';
+        const b = allBuses.find(x => x.id === busId);
+        return b ? `🚌 ${b.bus_no}` : '—';
+    }
+
+    function roleChangeBtn(u) {
+        return `<button class="btn btn-secondary btn-sm" onclick="openRoleModal(${u.id},'${u.name}','${u.role}',${u.assigned_bus_id || 'null'})" title="Change Role">✏️ Role</button>`;
+    }
+
+    function feeStatusBadge(u) {
+        if (u.role !== 'student') return '<span class="badge" style="background:var(--bg-tertiary);color:var(--text-muted)">N/A</span>';
+        if (!u.is_fee_paid) return '<span class="badge badge-red">Unpaid</span>';
+        return `<span class="badge badge-green">Paid</span>`;
+    }
+
+    function feeBtn(u) {
+        if (u.role !== 'student') return '';
+        const action = u.is_fee_paid ? 'revoke' : 'pay';
+        const color = u.is_fee_paid ? 'btn-danger' : 'btn-success';
+        const title = u.is_fee_paid ? 'Revoke Fee Pass' : 'Mark as Paid';
+        const icon = u.is_fee_paid ? '❌' : '✅';
+        return `<button class="btn ${color} btn-sm btn-icon" onclick="setFee(${u.id}, '${action}')" title="${title}">${icon}</button>`;
+    }
+
     function renderTable() {
         document.getElementById('userCount').textContent = `${filteredUsers.length} users`;
         const tbody = document.getElementById('userTbody');
         if (!filteredUsers.length) {
-            tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><span class="empty-state-icon">👥</span>No users found</div></td></tr>'; return;
+            tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><span class="empty-state-icon">👥</span>No users found</div></td></tr>'; return;
         }
         tbody.innerHTML = filteredUsers.map((u, i) => `
         <tr>
@@ -106,31 +151,46 @@
             <td style="font-size:12px;color:var(--text-muted);">${u.email}</td>
             <td style="font-size:12px;">${u.reg_no || '—'}</td>
             <td>${roleBadge(u.role)}</td>
+            <td style="font-size:12px;color:var(--text-secondary);">${busLabel(u.assigned_bus_id)}</td>
+            <td>${feeStatusBadge(u)}</td>
             <td style="font-size:12px;color:var(--text-muted);">${u.created_at}</td>
             <td>
                 <div style="display:flex;gap:6px;">
-                    <button class="btn btn-secondary btn-sm" onclick="openRoleModal(${u.id},'${u.name}','${u.role}')" title="Change Role">
-                        ${u.role === 'student' ? '👑 Make Admin' : '🎓 Make Student'}
-                    </button>
+                    ${roleChangeBtn(u)}
+                    ${feeBtn(u)}
                     <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser(${u.id},'${u.name}')" title="Delete">🗑️</button>
                 </div>
             </td>
         </tr>`).join('');
     }
 
-    function openRoleModal(id, name, currentRole) {
+    function onRoleChange() {
+        const role = document.getElementById('newRole').value;
+        document.getElementById('busAssignGroup').style.display = (role === 'incharge') ? 'block' : 'none';
+    }
+
+    function openRoleModal(id, name, currentRole, currentBusId) {
         pendingRoleUserId = id;
         document.getElementById('roleModalMsg').textContent =
-            `Change role for "${name}" (currently: ${currentRole.charAt(0).toUpperCase() + currentRole.slice(1)})`;
-        document.getElementById('newRole').value = currentRole === 'student' ? 'admin' : 'student';
+            `Change role for "${name}" (currently: ${currentRole})`;
+        document.getElementById('newRole').value = currentRole;
+        document.getElementById('assignedBus').value = currentBusId || '';
+        onRoleChange();
         openModal('roleModal');
     }
 
     async function applyRoleChange() {
         const newRole = document.getElementById('newRole').value;
-        const res = await apiPut(`/api/users/${pendingRoleUserId}/role`, { role: newRole });
+        const assignedBusId = document.getElementById('assignedBus').value || null;
+        if (newRole === 'incharge' && !assignedBusId) {
+            showToast('Please assign a bus for Incharge role', 'error'); return;
+        }
+        const res = await apiPut(`/api/users/${pendingRoleUserId}/role`, {
+            role: newRole,
+            assigned_bus_id: assignedBusId ? parseInt(assignedBusId) : null
+        });
         if (res.ok) {
-            showToast(`User promoted to ${newRole}!`, 'success');
+            showToast(`Role updated to ${newRole}!`, 'success');
             closeModal('roleModal');
             load();
         } else {
@@ -144,6 +204,17 @@
             if (res.ok) { showToast('User deleted', 'success'); load(); }
             else showToast(res.data.error || 'Error deleting user', 'error');
         });
+    }
+
+    async function setFee(id, action) {
+        if (!confirm(`Are you sure you want to mark this student as ${action === 'pay' ? 'Paid' : 'Unpaid'}?`)) return;
+        const res = await apiPut(`/api/users/${id}/fee`, { action: action });
+        if (res.ok) {
+            showToast('Fee status updated successfully', 'success');
+            load();
+        } else {
+            showToast(res.data.error || 'Failed to update fee', 'error');
+        }
     }
 
     load();

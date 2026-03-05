@@ -167,9 +167,14 @@
                         <button class="demo-fill-btn" onclick="fillDemo('admin@college.edu','admin123')">Fill</button>
                     </div>
                     <div class="demo-cred-row">
-                        <span>🎓 Student: student1@college.edu / student123</span>
+                        <span>🚌 Incharge: incharge@college.edu / incharge123</span>
                         <button class="demo-fill-btn"
-                            onclick="fillDemo('student1@college.edu','student123')">Fill</button>
+                            onclick="fillDemo('incharge@college.edu','incharge123')">Fill</button>
+                    </div>
+                    <div class="demo-cred-row">
+                        <span>🎓 Student: student@college.edu / student123</span>
+                        <button class="demo-fill-btn"
+                            onclick="fillDemo('student@college.edu','student123')">Fill</button>
                     </div>
                 </div>
             </div>
@@ -237,7 +242,9 @@
             });
             const data = await res.json();
             if (data.success) {
-                window.location.href = data.role === 'admin' ? '/admin/dashboard' : '/student/dashboard';
+                if (data.role === 'admin') window.location.href = '/admin/dashboard';
+                else if (data.role === 'incharge') window.location.href = '/incharge/dashboard';
+                else window.location.href = '/student/dashboard';
             } else {
                 errEl.textContent = data.message || 'Login failed';
                 errEl.style.display = 'block';

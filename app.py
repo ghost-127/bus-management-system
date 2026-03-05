@@ -3,8 +3,9 @@ from flask_login import LoginManager, login_user, logout_user, login_required, c
 from flask_mail import Mail, Message
 from functools import wraps
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
-from models import db, User, Driver, Bus, Route, Stop, Timing, Holiday
+from models import db, User, Driver, Bus, Route, Stop, Timing, Holiday, ChangeRequest, Notification
 import os
+from datetime import datetime
 
 try:
     import email_config as ecfg
@@ -51,6 +52,16 @@ def admin_required(f):
     return decorated
 
 
+def incharge_required(f):
+    """Allows both admin and incharge to access a route."""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        if not current_user.is_authenticated or current_user.role not in ('admin', 'incharge'):
+            return redirect(url_for('student_dashboard'))
+        return f(*args, **kwargs)
+    return decorated
+
+
 # ─────────────────────────── AUTH ROUTES ────────────────────────────
 
 @app.route('/')
@@ -58,6 +69,8 @@ def index():
     if current_user.is_authenticated:
         if current_user.role == 'admin':
             return redirect(url_for('admin_dashboard'))
+        if current_user.role == 'incharge':
+            return redirect(url_for('incharge_dashboard'))
         return redirect(url_for('student_dashboard'))
     return redirect(url_for('login'))
 
@@ -277,6 +290,11 @@ def api_me():
 @login_required
 def api_buses():
     buses = Bus.query.all()
+    # If student, only show 'regular' buses if they have paid the fee
+    if current_user.role == 'student':
+        if not current_user.is_fee_paid:
+            buses = [b for b in buses if b.bus_type == 'event']
+            
     return jsonify([b.to_dict() for b in buses])
 
 
@@ -287,6 +305,7 @@ def api_buses_create():
     data = request.get_json()
     b = Bus(bus_no=data['bus_no'], capacity=int(data.get('capacity', 40)),
             status=data.get('status', 'active'),
+            bus_type=data.get('bus_type', 'regular'),
             driver_id=data.get('driver_id') or None)
     db.session.add(b)
     db.session.commit()
@@ -302,6 +321,7 @@ def api_buses_update(bid):
     b.bus_no = data.get('bus_no', b.bus_no)
     b.capacity = int(data.get('capacity', b.capacity))
     b.status = data.get('status', b.status)
+    b.bus_type = data.get('bus_type', b.bus_type)
     b.driver_id = data.get('driver_id') or None
     db.session.commit()
     return jsonify(b.to_dict())
@@ -323,6 +343,11 @@ def api_buses_delete(bid):
 @login_required
 def api_routes():
     routes = Route.query.all()
+    
+    # If student, only show routes for 'regular' buses if they have paid
+    if current_user.role == 'student' and not current_user.is_fee_paid:
+        routes = [r for r in routes if r.bus and r.bus.bus_type == 'event']
+        
     return jsonify([r.to_dict() for r in routes])
 
 
@@ -391,8 +416,16 @@ def api_stops():
 @admin_required
 def api_stops_create():
     data = request.get_json()
-    s = Stop(name=data['name'], route_id=int(data['route_id']),
-             sequence=int(data.get('sequence', 1)),
+    r_id = int(data['route_id'])
+    seq = int(data.get('sequence', 1))
+    
+    # Auto-adjust existing stops: shift those >= seq up by 1
+    higher_stops = Stop.query.filter(Stop.route_id == r_id, Stop.sequence >= seq).all()
+    for hs in higher_stops:
+        hs.sequence += 1
+        
+    s = Stop(name=data['name'], route_id=r_id,
+             sequence=seq,
              arrival_time=data.get('arrival_time'),
              departure_time=data.get('departure_time'),
              landmark=data.get('landmark', ''))
@@ -407,8 +440,26 @@ def api_stops_create():
 def api_stops_update(sid):
     s = Stop.query.get_or_404(sid)
     data = request.get_json()
+    
+    old_seq = s.sequence
+    new_seq = int(data.get('sequence', s.sequence))
+    r_id = s.route_id
+    
+    # Auto-adjust other stops if sequence changes
+    if new_seq != old_seq:
+        if new_seq > old_seq:
+            # Moving down: shift stops between old_seq and new_seq up (-1)
+            affected = Stop.query.filter(Stop.route_id == r_id, Stop.sequence > old_seq, Stop.sequence <= new_seq).all()
+            for ash in affected:
+                ash.sequence -= 1
+        else:
+            # Moving up: shift stops between new_seq and old_seq down (+1)
+            affected = Stop.query.filter(Stop.route_id == r_id, Stop.sequence >= new_seq, Stop.sequence < old_seq).all()
+            for ash in affected:
+                ash.sequence += 1
+                
     s.name = data.get('name', s.name)
-    s.sequence = int(data.get('sequence', s.sequence))
+    s.sequence = new_seq
     s.arrival_time = data.get('arrival_time', s.arrival_time)
     s.departure_time = data.get('departure_time', s.departure_time)
     s.landmark = data.get('landmark', s.landmark)
@@ -421,7 +472,15 @@ def api_stops_update(sid):
 @admin_required
 def api_stops_delete(sid):
     s = Stop.query.get_or_404(sid)
+    r_id = s.route_id
+    seq = s.sequence
     db.session.delete(s)
+    
+    # Auto-adjust existing stops: shift those > seq down by 1
+    higher_stops = Stop.query.filter(Stop.route_id == r_id, Stop.sequence > seq).all()
+    for hs in higher_stops:
+        hs.sequence -= 1
+        
     db.session.commit()
     return jsonify({'success': True})
 
@@ -436,6 +495,11 @@ def api_timings():
     if bus_id:
         q = q.filter_by(bus_id=int(bus_id))
     timings = q.all()
+    
+    # If student, only show timings for 'regular' buses if they have paid
+    if current_user.role == 'student' and not current_user.is_fee_paid:
+        timings = [t for t in timings if t.bus and t.bus.bus_type == 'event']
+        
     return jsonify([t.to_dict() for t in timings])
 
 
@@ -541,9 +605,29 @@ def api_users_role(uid):
     u = User.query.get_or_404(uid)
     data = request.get_json()
     new_role = data.get('role')
-    if new_role not in ('student', 'admin'):
+    if new_role not in ('student', 'admin', 'incharge'):
         return jsonify({'error': 'Invalid role'}), 400
     u.role = new_role
+    u.assigned_bus_id = data.get('assigned_bus_id') or None
+    db.session.commit()
+    return jsonify(u.to_dict())
+
+
+@app.route('/api/users/<int:uid>/fee', methods=['PUT'])
+@login_required
+@admin_required
+def api_users_fee(uid):
+    u = User.query.get_or_404(uid)
+    data = request.get_json()
+    action = data.get('action')
+    
+    if action == 'pay':
+        u.is_fee_paid = True
+    elif action == 'revoke':
+        u.is_fee_paid = False
+    else:
+        return jsonify({'error': 'Invalid action'}), 400
+        
     db.session.commit()
     return jsonify(u.to_dict())
 
@@ -641,6 +725,174 @@ def api_routes_with_stops():
         rd['stops'] = [s.to_dict() for s in sorted(r.stops, key=lambda x: x.sequence)]
         result.append(rd)
     return jsonify(result)
+
+
+
+# ────────────────────── INCHARGE PAGES ──────────────────────
+
+@app.route('/incharge/dashboard')
+@login_required
+def incharge_dashboard():
+    if current_user.role not in ('admin', 'incharge'):
+        return redirect(url_for('student_dashboard'))
+    bus = None
+    if current_user.assigned_bus_id:
+        bus = Bus.query.get(current_user.assigned_bus_id)
+    return render_template('incharge/dashboard.html', bus=bus)
+
+
+@app.route('/incharge/bus')
+@login_required
+def incharge_bus():
+    if current_user.role not in ('admin', 'incharge'):
+        return redirect(url_for('student_dashboard'))
+    bus = Bus.query.get(current_user.assigned_bus_id) if current_user.assigned_bus_id else None
+    return render_template('incharge/bus.html', bus=bus)
+
+
+@app.route('/incharge/timings')
+@login_required
+def incharge_timings():
+    if current_user.role not in ('admin', 'incharge'):
+        return redirect(url_for('student_dashboard'))
+    return render_template('incharge/timings.html')
+
+
+@app.route('/incharge/requests')
+@login_required
+def incharge_requests():
+    if current_user.role not in ('admin', 'incharge'):
+        return redirect(url_for('student_dashboard'))
+    return render_template('incharge/requests.html')
+
+
+@app.route('/incharge/notifications')
+@login_required
+def incharge_notifications():
+    if current_user.role not in ('admin', 'incharge'):
+        return redirect(url_for('student_dashboard'))
+    return render_template('incharge/notifications.html')
+
+
+# ────────────────────── ADMIN EXTRA PAGES ──────────────────────
+
+@app.route('/admin/requests')
+@login_required
+def admin_requests():
+    if current_user.role != 'admin':
+        return redirect(url_for('student_dashboard'))
+    return render_template('admin/requests.html')
+
+
+@app.route('/admin/notifications')
+@login_required
+def admin_notifications():
+    if current_user.role != 'admin':
+        return redirect(url_for('student_dashboard'))
+    return render_template('incharge/notifications.html')
+
+
+# ────────────────────── API : CHANGE REQUESTS ──────────────────────
+
+@app.route('/api/change-requests', methods=['GET'])
+@login_required
+def api_change_requests():
+    if current_user.role == 'admin':
+        reqs = ChangeRequest.query.order_by(ChangeRequest.created_at.desc()).all()
+    else:
+        reqs = ChangeRequest.query.filter_by(incharge_id=current_user.id).order_by(ChangeRequest.created_at.desc()).all()
+    return jsonify([r.to_dict() for r in reqs])
+
+
+@app.route('/api/change-requests', methods=['POST'])
+@login_required
+def api_change_requests_create():
+    if current_user.role not in ('admin', 'incharge'):
+        return jsonify({'error': 'Not authorised'}), 403
+    data = request.get_json()
+    bus_id = current_user.assigned_bus_id if current_user.role == 'incharge' else data.get('bus_id')
+    if not bus_id:
+        return jsonify({'error': 'No bus assigned'}), 400
+    cr = ChangeRequest(
+        incharge_id=current_user.id,
+        bus_id=bus_id,
+        request_type=data.get('request_type', 'other'),
+        description=data['description']
+    )
+    db.session.add(cr)
+    db.session.commit()
+    return jsonify(cr.to_dict()), 201
+
+
+@app.route('/api/change-requests/<int:cid>/action', methods=['PUT'])
+@login_required
+@admin_required
+def api_change_requests_action(cid):
+    cr = ChangeRequest.query.get_or_404(cid)
+    data = request.get_json()
+    action = data.get('action')
+    if action not in ('approved', 'rejected'):
+        return jsonify({'error': 'Invalid action'}), 400
+    cr.status = action
+    cr.admin_notes = data.get('admin_notes', '')
+    db.session.commit()
+    return jsonify(cr.to_dict())
+
+
+# ────────────────────── API : NOTIFICATIONS ──────────────────────
+
+@app.route('/api/notifications', methods=['GET'])
+@login_required
+def api_notifications():
+    if current_user.role in ('admin', 'incharge'):
+        notifs = Notification.query.filter_by(sender_id=current_user.id).order_by(Notification.created_at.desc()).all()
+    else:
+        # Students see: all-student notifications + bus-specific ones targeting their incharge bus
+        notifs = Notification.query.filter(
+            Notification.target_bus_id == None
+        ).order_by(Notification.created_at.desc()).all()
+    return jsonify([n.to_dict() for n in notifs])
+
+
+@app.route('/api/notifications/all', methods=['GET'])
+@login_required
+@admin_required
+def api_notifications_all():
+    notifs = Notification.query.order_by(Notification.created_at.desc()).all()
+    return jsonify([n.to_dict() for n in notifs])
+
+
+@app.route('/api/notifications', methods=['POST'])
+@login_required
+def api_notifications_create():
+    if current_user.role not in ('admin', 'incharge'):
+        return jsonify({'error': 'Not authorised'}), 403
+    data = request.get_json()
+    if not data.get('title') or not data.get('message'):
+        return jsonify({'error': 'Title and message are required'}), 400
+    target_bus_id = data.get('target_bus_id') or None
+    if current_user.role == 'incharge' and not target_bus_id:
+        target_bus_id = current_user.assigned_bus_id
+    n = Notification(
+        title=data['title'],
+        message=data['message'],
+        sender_id=current_user.id,
+        target_bus_id=target_bus_id
+    )
+    db.session.add(n)
+    db.session.commit()
+    return jsonify(n.to_dict()), 201
+
+
+@app.route('/api/notifications/<int:nid>', methods=['DELETE'])
+@login_required
+@admin_required
+def api_notifications_delete(nid):
+    n = Notification.query.get_or_404(nid)
+    db.session.delete(n)
+    db.session.commit()
+    return jsonify({'success': True})
+
 
 
 if __name__ == '__main__':

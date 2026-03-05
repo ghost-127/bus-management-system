@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Change Requests — Admin{% endblock %}
+{% block page_title %}📝 Change Requests{% endblock %}
+
+{% block content %}
+<!-- Filter bar -->
+<div style="display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap;align-items:center;">
+    <select id="statusFilter" class="form-control" style="width:auto;padding:6px 12px;font-size:12px;"
+        onchange="loadRequests()">
+        <option value="">All Statuses</option>
+        <option value="pending">Pending</option>
+        <option value="approved">Approved</option>
+        <option value="rejected">Rejected</option>
+    </select>
+    <select id="typeFilter" class="form-control" style="width:auto;padding:6px 12px;font-size:12px;"
+        onchange="loadRequests()">
+        <option value="">All Types</option>
+        <option value="stop">Stop</option>
+        <option value="timing">Timing</option>
+        <option value="route">Route</option>
+        <option value="other">Other</option>
+    </select>
+</div>
+
+<div class="card">
+    <div class="card-header">
+        <div class="card-title">📋 All Change Requests</div>
+        <span id="pendingCount"
+            style="background:rgba(245,158,11,0.15);color:#fbbf24;border:1px solid rgba(245,158,11,0.25);border-radius:20px;padding:3px 12px;font-size:12px;font-weight:700;"></span>
+    </div>
+    <div class="card-body" style="padding:0;">
+        <div id="reqList">
+            <div style="text-align:center;padding:28px;">
+                <div class="spinner" style="margin:auto;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Action Modal -->
+<div class="modal-backdrop" id="actionBackdrop" style="display:none;" onclick="closeModal()"></div>
+<div class="modal" id="actionModal" style="display:none;max-width:460px;">
+    <div class="modal-header">
+        <div class="modal-title" id="modalTitle">Review Request</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+        <div id="modalDesc"
+            style="background:rgba(255,255,255,0.04);border-radius:10px;padding:12px;margin-bottom:14px;font-size:13px;color:var(--text-secondary);">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Admin Notes (optional)</label>
+            <textarea id="adminNotes" class="form-control" rows="3" placeholder="Reason for approval/rejection…"
+                style="resize:vertical;"></textarea>
+        </div>
+    </div>
+    <div class="modal-footer" style="display:flex;gap:10px;">
+        <button onclick="submitAction('approved')" class="btn btn-success" style="flex:1;">✅ Approve</button>
+        <button onclick="submitAction('rejected')" class="btn btn-danger" style="flex:1;">❌ Reject</button>
+        <button onclick="closeModal()" class="btn btn-secondary">Cancel</button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let allReqs = []; let activeId = null;
+    const TYPE_C = { stop: '#06b6d4', timing: '#f59e0b', route: '#8b5cf6', other: '#94a3b8' };
+    const ST_C = { pending: '#f59e0b', approved: '#10b981', rejected: '#ef4444' };
+
+    function badge(val, c) { return `<span style="background:${c}22;color:${c};border:1px solid ${c}44;border-radius:6px;padding:2px 8px;font-size:11px;font-weight:700;">${val}</span>`; }
+
+    async function loadRequests() {
+        allReqs = await apiGet('/api/change-requests');
+        const sf = document.getElementById('statusFilter').value;
+        const tf = document.getElementById('typeFilter').value;
+        let filtered = allReqs;
+        if (sf) filtered = filtered.filter(r => r.status === sf);
+        if (tf) filtered = filtered.filter(r => r.request_type === tf);
+        const pending = allReqs.filter(r => r.status === 'pending').length;
+        document.getElementById('pendingCount').textContent = `${pending} pending`;
+
+        const el = document.getElementById('reqList');
+        if (!filtered.length) {
+            el.innerHTML = '<div class="empty-state" style="padding:28px;"><span class="empty-state-icon">📝</span>No requests found</div>';
+            return;
+        }
+        el.innerHTML = `<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">
+    <thead><tr>
+      <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">Incharge</th>
+      <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">Bus</th>
+      <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">Type</th>
+      <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">Description</th>
+      <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">Status</th>
+      <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--text-muted);font-weight:700;text-transform:uppercase;border-bottom:1px solid var(--border);">Date</th>
+      <th style="padding:10px 14px;border-bottom:1px solid var(--border);">Action</th>
+    </tr></thead>
+    <tbody>${filtered.map(r => `
+      <tr style="border-bottom:1px solid var(--border);">
+        <td style="padding:11px 14px;font-weight:600;font-size:13px;">${r.incharge_name}</td>
+        <td style="padding:11px 14px;font-size:13px;font-weight:700;color:var(--text-primary);">🚌 ${r.bus_no}</td>
+        <td style="padding:11px 14px;">${badge(r.request_type, TYPE_C[r.request_type] || '#6366f1')}</td>
+        <td style="padding:11px 14px;font-size:12px;color:var(--text-secondary);max-width:220px;">${r.description.substring(0, 80)}${r.description.length > 80 ? '…' : ''}</td>
+        <td style="padding:11px 14px;">${badge(r.status, ST_C[r.status] || '#6366f1')}</td>
+        <td style="padding:11px 14px;font-size:11px;color:var(--text-muted);white-space:nowrap;">${r.created_at}</td>
+        <td style="padding:11px 14px;">
+          ${r.status === 'pending' ? `<button onclick="openModal(${r.id})" class="btn btn-primary btn-sm">Review</button>` : `<span style="font-size:11px;color:var(--text-muted);">${r.admin_notes || '—'}</span>`}
+        </td>
+      </tr>`).join('')}</tbody></table></div>`;
+    }
+
+    function openModal(id) {
+        activeId = id;
+        const r = allReqs.find(x => x.id === id);
+        document.getElementById('modalTitle').textContent = `Review: ${r.request_type} request — ${r.bus_no}`;
+        document.getElementById('modalDesc').innerHTML = `<b>From:</b> ${r.incharge_name}<br><b>Description:</b> ${r.description}`;
+        document.getElementById('adminNotes').value = '';
+        document.getElementById('actionBackdrop').style.display = 'flex';
+        document.getElementById('actionModal').style.display = 'block';
+    }
+
+    function closeModal() {
+        document.getElementById('actionBackdrop').style.display = 'none';
+        document.getElementById('actionModal').style.display = 'none';
+    }
+
+    async function submitAction(action) {
+        const notes = document.getElementById('adminNotes').value.trim();
+        const res = await fetch(`/api/change-requests/${activeId}/action`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action, admin_notes: notes })
+        });
+        if (res.ok) { closeModal(); loadRequests(); showToast(`Request ${action}!`, 'success'); }
+        else { showToast('Error updating request', 'error'); }
+    }
+
+    loadRequests();
+</script>
+{% endblock %}
