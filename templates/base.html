@@ -246,14 +246,16 @@
 
     {% if current_user.is_authenticated %}
     <style>
-        /* Global Background Image for authenticated users */
+        /* Global Background Image for authenticated users — High Quality */
         body {
-            background-image: linear-gradient(rgba(10, 14, 26, 0.88), rgba(15, 20, 40, 0.90)),
+            background-image: linear-gradient(rgba(8, 12, 22, 0.78), rgba(10, 16, 34, 0.82)),
             url("{{ url_for('static', filename='img/busmang.jpg') }}");
             background-size: cover;
-            background-position: center;
+            background-position: center top;
             background-attachment: fixed;
             background-repeat: no-repeat;
+            image-rendering: -webkit-optimize-contrast;
+            image-rendering: high-quality;
         }
     </style>
     <div class="app-layout">

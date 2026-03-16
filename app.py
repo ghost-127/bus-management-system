@@ -322,6 +322,36 @@ def api_buses_update(bid):
     return jsonify(b.to_dict())
 
 
+@app.route('/api/buses/<int:bid>/live-update', methods=['PUT'])
+@login_required
+@incharge_required
+def api_trip_update(bid):
+    b = Bus.query.get_or_404(bid)
+    
+    # Only assigned incharge or admin can update
+    if current_user.role == 'incharge' and current_user.assigned_bus_id != b.id:
+        return jsonify({'error': 'Not authorized for this bus'}), 403
+        
+    data = request.get_json()
+    status = data.get('current_status')
+    stop_id = data.get('current_stop_id')
+    
+    if status in ('Not Started', 'In Transit', 'Completed', 'Breakdown'):
+        b.current_status = status
+        
+    # If completed or not started, reset stop
+    if status in ('Completed', 'Not Started'):
+        b.current_stop_id = None
+    elif stop_id is not None:
+        if stop_id == '':
+            b.current_stop_id = None
+        else:
+            b.current_stop_id = int(stop_id)
+            
+    db.session.commit()
+    return jsonify(b.to_dict())
+
+
 @app.route('/api/buses/<int:bid>', methods=['DELETE'])
 @login_required
 @admin_required

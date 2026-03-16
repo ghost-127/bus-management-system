@@ -20,15 +20,15 @@
     .landing-bg {
         position: absolute;
         inset: -20px;
-        /* Slight overflow for parallax effect */
-        background-image: url("{{ url_for('static', filename='img/hero-bg.jpg') }}");
+        background-image: url("{{ url_for('static', filename='img/manghome.webp') }}");
         background-size: cover;
         background-position: center;
-        filter: blur(4px) brightness(0.6);
-        transform: scale(1.05);
-        /* Slight zoom */
+        image-rendering: -webkit-optimize-contrast;
+        filter: brightness(0.82) saturate(1.15) contrast(1.05);
+        transform: scale(1.02);
         animation: bgZoom 20s ease-in-out infinite alternate;
         z-index: 1;
+        will-change: transform;
     }
 
     @keyframes bgZoom {
@@ -45,7 +45,7 @@
     .landing-overlay {
         position: absolute;
         inset: 0;
-        background: linear-gradient(135deg, rgba(8, 13, 31, 0.85) 0%, rgba(15, 21, 53, 0.7) 100%);
+        background: linear-gradient(135deg, rgba(8, 13, 31, 0.62) 0%, rgba(15, 21, 53, 0.45) 100%);
         z-index: 2;
     }
 
@@ -54,8 +54,9 @@
         position: relative;
         z-index: 3;
         text-align: center;
-        max-width: 800px;
-        padding: 40px 20px;
+        max-width: 700px;
+        width: 90%;
+        padding: 40px 24px;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -206,8 +207,13 @@
             </a>
         </div>
 
-        <div style="margin-top: 40px; color: rgba(255,255,255,0.4); font-size: 13px; font-weight: 500;">
-            POWERED BY NIRMALA COLLEGE OF ENGINEERING
+        <div style="margin-top:36px;display:flex;align-items:center;gap:8px;justify-content:center;">
+            <span
+                style="font-size:11px;letter-spacing:1.5px;font-weight:500;color:rgba(255,255,255,0.3);text-transform:uppercase;">Powered
+                by</span>
+            <span
+                style="font-size:13px;font-weight:800;letter-spacing:1px;background:linear-gradient(90deg,#6366f1,#06b6d4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">Void
+                X</span>
         </div>
     </div>
 </div>

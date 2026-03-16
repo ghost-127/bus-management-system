@@ -54,28 +54,44 @@
             grid.innerHTML = '<div class="empty-state" style="grid-column:1/-1;"><span class="empty-state-icon">🚌</span><p>No buses found</p></div>';
             return;
         }
-        grid.innerHTML = buses.map(b => `
+        grid.innerHTML = buses.map(b => {
+            let liveBadge = '';
+            if (b.current_status === 'In Transit') {
+                liveBadge = '<span class="badge" style="background:rgba(52,211,153,0.1);color:#34d399;">🟢 In Transit</span>';
+            } else if (b.current_status === 'Breakdown') {
+                liveBadge = '<span class="badge" style="background:rgba(239,68,68,0.1);color:#f87171;">🚨 Breakdown</span>';
+            } else if (b.current_status === 'Completed') {
+                liveBadge = '<span class="badge" style="background:rgba(99,102,241,0.1);color:#818cf8;">🏁 Completed</span>';
+            } else {
+                liveBadge = '<span class="badge" style="background:rgba(156,163,175,0.1);color:#9ca3af;">⚪ Not Started</span>';
+            }
+
+            return `
         <div class="bus-card" onclick="window.location='/student/route/${b.id}'">
             <div class="bus-card-header">
                 <div>
                     <div class="bus-number">${b.bus_no}</div>
                     ${b.bus_type === 'event'
-                ? '<span class="badge badge-purple" style="margin-top:4px;display:inline-block;">Event Bus</span>'
-                : ''}
+                    ? '<span class="badge badge-purple" style="margin-top:4px;display:inline-block;">Event Bus</span>'
+                    : ''}
                 </div>
-                ${b.status === 'active'
-                ? '<span class="badge badge-success">● Active</span>'
-                : '<span class="badge badge-danger">● Inactive</span>'}
+                <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+                    ${b.status === 'active'
+                    ? '<span class="badge badge-success">● Active</span>'
+                    : '<span class="badge badge-danger">● Inactive</span>'}
+                    ${liveBadge}
+                </div>
             </div>
             <div class="bus-route">🗺️ ${b.route_name}</div>
             <div class="bus-meta">
                 <div class="bus-meta-item">👤 ${b.driver_name}</div>
                 <div class="bus-meta-item">💺 ${b.capacity} seats</div>
             </div>
+            ${b.current_status === 'In Transit' ? `<div style="font-size:12px;font-weight:600;color:#34d399;margin-top:8px;">📍 Location: At Stop #${b.current_stop_id || '?'}</div>` : ''}
             <div style="margin-top:16px;">
-                <span class="btn btn-secondary btn-sm" style="width:100%;justify-content:center;">View Route & Stops →</span>
+                <span class="btn btn-secondary btn-sm" style="width:100%;justify-content:center;">View Route & Live Stops →</span>
             </div>
-        </div>`).join('');
+        </div>`}).join('');
     }
 
     loadBuses();

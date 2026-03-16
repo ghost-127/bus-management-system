@@ -66,6 +66,8 @@ class Bus(db.Model):
     capacity = db.Column(db.Integer, nullable=False)
     bus_type = db.Column(db.String(20), default='regular')  # 'regular' or 'event'
     status = db.Column(db.String(20), default='active')
+    current_status = db.Column(db.String(30), default='Not Started') # Live tracking: Not Started, In Transit, Breakdown, Completed
+    current_stop_id = db.Column(db.Integer, db.ForeignKey('stops.id'), nullable=True) # Last passed or current stop
     driver_id = db.Column(db.Integer, db.ForeignKey('drivers.id'), nullable=True)
     routes = db.relationship('Route', backref='bus', lazy=True)
     timings = db.relationship('Timing', backref='bus', lazy=True)
@@ -79,6 +81,8 @@ class Bus(db.Model):
             'capacity': self.capacity,
             'bus_type': self.bus_type,
             'status': self.status,
+            'current_status': self.current_status,
+            'current_stop_id': self.current_stop_id,
             'driver_id': self.driver_id,
             'driver_name': self.driver.name if self.driver else 'Unassigned',
             'route_name': route_name

@@ -82,7 +82,10 @@
     <div>
         <div class="bus-no-big">{{ bus.bus_no }}</div>
         <div class="bus-meta">Capacity: {{ bus.capacity }} seats</div>
-        <div style="margin-top:8px;">{{ statusBadge(bus.status) if statusBadge else '<span>'~bus.status~'</span>' }}
+        <div style="margin-top:8px;">
+            {{ statusBadge(bus.status) if statusBadge else '<span>'~bus.status~'</span>' }}
+            <span id="liveStatusBadge"
+                style="margin-left:8px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;"></span>
         </div>
     </div>
 </div>
@@ -115,8 +118,24 @@
 
 <!-- Stops -->
 <div class="card">
-    <div class="card-header">
-        <div class="card-title">📍 Route Stops</div>
+    <div class="card-header" style="flex-wrap:wrap;gap:8px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <div class="card-title">📍 Route Stops</div>
+            <span id="liveStatusBadge"
+                style="padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;"></span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button id="btnStart" onclick="updateTrip('In Transit')" class="btn btn-primary btn-sm"
+                style="font-size:11px;padding:5px 12px;">▶️ Start Trip</button>
+            <button id="btnBreakdown" onclick="updateTrip('Breakdown')" class="btn btn-sm"
+                style="display:none;font-size:11px;padding:5px 12px;background:rgba(239,68,68,0.12);color:#f87171;border:1px solid rgba(239,68,68,0.3);">🚨
+                Breakdown</button>
+            <button id="btnResume" onclick="updateTrip('In Transit')" class="btn btn-sm"
+                style="display:none;font-size:11px;padding:5px 12px;background:rgba(52,211,153,0.12);color:#34d399;border:1px solid rgba(52,211,153,0.3);">▶️
+                Resume</button>
+            <button id="btnEnd" onclick="updateTrip('Completed')" class="btn btn-secondary btn-sm"
+                style="display:none;font-size:11px;padding:5px 12px;border-style:dashed;">🏁 End Trip</button>
+        </div>
     </div>
     <div class="card-body" style="padding:0;">
         <div id="stopList">
@@ -179,17 +198,86 @@
         stopEl.innerHTML = '<div class="empty-state" style="padding:20px;"><span class="empty-state-icon">📍</span>No stops added</div>';
         return;
     }
-    stopEl.innerHTML = myRoute.stops.map(s => `
-    <div class="stop-row">
-      <div class="stop-num">${s.sequence}</div>
-      <div>
-        <div class="stop-name">${s.name}</div>
+
+    // Update live status badge + button visibility
+    const badge = document.getElementById('liveStatusBadge');
+    const startBtn = document.getElementById('btnStart');
+    const bdBtn = document.getElementById('btnBreakdown');
+    const resumeBtn = document.getElementById('btnResume');
+    const endBtn = document.getElementById('btnEnd');
+
+    const status = myBus.current_status || 'Not Started';
+    if (status === 'Not Started') {
+        badge.textContent = '⚪ Not Started'; badge.style.background = 'rgba(156,163,175,0.15)'; badge.style.color = '#9ca3af';
+        startBtn.style.display = ''; bdBtn.style.display = 'none'; resumeBtn.style.display = 'none'; endBtn.style.display = 'none';
+    } else if (status === 'In Transit') {
+        badge.textContent = '🟢 In Transit'; badge.style.background = 'rgba(52,211,153,0.15)'; badge.style.color = '#34d399';
+        startBtn.style.display = 'none'; bdBtn.style.display = ''; resumeBtn.style.display = 'none'; endBtn.style.display = '';
+    } else if (status === 'Breakdown') {
+        badge.textContent = '🚨 Breakdown'; badge.style.background = 'rgba(239,68,68,0.15)'; badge.style.color = '#f87171';
+        startBtn.style.display = 'none'; bdBtn.style.display = 'none'; resumeBtn.style.display = ''; endBtn.style.display = 'none';
+    } else if (status === 'Completed') {
+        badge.textContent = '🏁 Completed'; badge.style.background = 'rgba(99,102,241,0.15)'; badge.style.color = '#818cf8';
+        startBtn.style.display = ''; bdBtn.style.display = 'none'; resumeBtn.style.display = 'none'; endBtn.style.display = 'none';
+    }
+
+
+    stopEl.innerHTML = myRoute.stops.map((s, i) => {
+        const isCurrent = (myBus.current_stop_id === s.id);
+        const currentIdx = myRoute.stops.findIndex(x => x.id === myBus.current_stop_id);
+        const isPassed = (currentIdx !== -1 && i < currentIdx);
+
+        let highlight = '';
+        let numStyle = '';
+        let actionBtn = '';
+
+        if (isCurrent) {
+            highlight = 'background:rgba(52,211,153,0.05);border-left:4px solid #34d399;';
+            numStyle = 'background:#34d399;color:#fff;border:none;box-shadow:0 0 0 4px rgba(52,211,153,0.2);';
+        } else if (isPassed) {
+            numStyle = 'background:rgba(156,163,175,0.2);color:#9ca3af;border:none;';
+        }
+
+        if (myBus.current_status === 'In Transit' && !isCurrent && !isPassed) {
+            actionBtn = `<button onclick="updateTrip('In Transit', ${s.id})" class="btn btn-secondary btn-sm" style="font-size:11px;padding:4px 8px;border-radius:12px;">📍 Update Here</button>`;
+        }
+
+        return `
+    <div class="stop-row" style="${highlight}">
+      <div class="stop-num" style="${numStyle}">${isPassed ? '✓' : s.sequence}</div>
+      <div style="flex:1;">
+        <div class="stop-name" style="${isPassed ? 'color:#9ca3af;' : ''}">${s.name} ${isCurrent ? '<span style="font-size:10px;color:#34d399;margin-left:6px;border:1px solid #34d399;border-radius:10px;padding:2px 6px;background:rgba(52,211,153,0.08);">● Current</span>' : ''}</div>
         ${s.landmark ? `<div class="stop-land">📌 ${s.landmark}</div>` : ''}
       </div>
-      <span style="font-size:12px;font-weight:700;color:#34d399;">${s.arrival_time || ''}</span>
-      <span style="font-size:12px;font-weight:700;color:#818cf8;">${s.departure_time || ''}</span>
-    </div>`).join('');
+      <div style="text-align:right;">
+          ${actionBtn ? actionBtn : `
+            <span style="font-size:12px;font-weight:700;color:#34d399;margin-right:8px;">${s.arrival_time || ''}</span>
+            <span style="font-size:12px;font-weight:700;color:#818cf8;">${s.departure_time || ''}</span>
+          `}
+      </div>
+    </div>`}).join('');
 }
+
+    async function updateTrip(status, stopId = null) {
+        if (status === 'In Transit' && !stopId) {
+            const routes = await apiGet('/api/routes/with-stops');
+            const myRoute = routes.find(r => r.bus_id === {{ bus.id }});
+        if (myRoute && myRoute.stops.length) {
+            stopId = myRoute.stops[0].id;
+        }
+    }
+    const payload = { current_status: status };
+    if (stopId) payload.current_stop_id = stopId;
+    try {
+        const res = await fetch(`/api/buses/{{ bus.id }}/live-update`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        if (res.ok) { loadBusInfo(); }
+    } catch (err) { console.error('Update failed', err); }
+    }
+
     loadBusInfo();
 </script>
 {% endif %}

@@ -59,6 +59,43 @@
     .info-chip strong {
         color: var(--text-primary);
     }
+
+    @keyframes pulse-ring {
+        0% {
+            transform: scale(0.8);
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0.7);
+        }
+
+        70% {
+            transform: scale(1);
+            box-shadow: 0 0 0 10px rgba(52, 211, 153, 0);
+        }
+
+        100% {
+            transform: scale(0.8);
+            box-shadow: 0 0 0 0 rgba(52, 211, 153, 0);
+        }
+    }
+
+    .stop-dot-passed {
+        background: rgba(156, 163, 175, 0.2) !important;
+        color: #9ca3af !important;
+        border-color: transparent !important;
+    }
+
+    .stop-dot-current {
+        background: #34d399 !important;
+        color: #fff !important;
+        border-color: transparent !important;
+        animation: pulse-ring 2s infinite;
+    }
+
+    .stop-dot-broken {
+        background: #ef4444 !important;
+        color: #fff !important;
+        border-color: transparent !important;
+        animation: pulse-ring 2s infinite;
+    }
 </style>
 {% endblock %}
 
@@ -114,11 +151,33 @@
             } else {
                 timeline.innerHTML = stops.map((s, i) => {
                     const dotClass = i === 0 ? 'first' : (i === stops.length - 1 ? 'last' : 'mid');
+
+                    const isCurrent = (busData.current_stop_id === s.id);
+                    const currentIdx = stops.findIndex(x => x.id === busData.current_stop_id);
+                    const isPassed = (currentIdx !== -1 && i < currentIdx);
+
+                    let statusClass = '';
+                    let dotContent = s.sequence;
+                    let extraLabel = '';
+
+                    if (isCurrent) {
+                        if (busData.current_status === 'Breakdown') {
+                            statusClass = 'stop-dot-broken';
+                            extraLabel = '<span style="font-size:10px;color:#ef4444;margin-left:6px;border:1px solid #ef4444;border-radius:10px;padding:2px 6px;background:rgba(239,68,68,0.1);">🚨 Waiting for alternate bus</span>';
+                        } else {
+                            statusClass = 'stop-dot-current';
+                            extraLabel = '<span style="font-size:10px;color:#34d399;margin-left:6px;border:1px solid #34d399;border-radius:10px;padding:2px 6px;background:rgba(52,211,153,0.1);">📍 Bus is here</span>';
+                        }
+                    } else if (isPassed && busData.current_status !== 'Not Started') {
+                        statusClass = 'stop-dot-passed';
+                        dotContent = '✓';
+                    }
+
                     return `
-                    <div class="stop-item" style="padding:16px 24px;">
-                        <div class="stop-dot ${dotClass}">${s.sequence}</div>
+                    <div class="stop-item" style="padding:16px 24px;${isCurrent ? 'background:rgba(52,211,153,0.03);border-left:3px solid #34d399;' : ''}">
+                        <div class="stop-dot ${dotClass} ${statusClass}">${dotContent}</div>
                         <div class="stop-info">
-                            <div class="stop-name" style="font-size:15px;">${s.name}</div>
+                            <div class="stop-name" style="font-size:15px;${isPassed && busData.current_status !== 'Not Started' ? 'color:#9ca3af;' : ''}">${s.name} ${extraLabel}</div>
                             ${s.landmark ? `<div class="stop-landmark">📌 ${s.landmark}</div>` : ''}
                             <div class="stop-times" style="margin-top:8px;">
                                 ${s.arrival_time ? `<div class="stop-time-chip">Arr: <span>${s.arrival_time}</span></div>` : ''}
