@@ -32,7 +32,6 @@
                     <th>Reg. No.</th>
                     <th>Role</th>
                     <th>Assigned Bus</th>
-                    <th>Fee Status</th>
                     <th>Joined</th>
                     <th>Actions</th>
                 </tr>
@@ -116,20 +115,6 @@
         return `<button class="btn btn-secondary btn-sm" onclick="openRoleModal(${u.id},'${u.name}','${u.role}',${u.assigned_bus_id || 'null'})" title="Change Role">✏️ Role</button>`;
     }
 
-    function feeStatusBadge(u) {
-        if (u.role !== 'student') return '<span class="badge" style="background:var(--bg-tertiary);color:var(--text-muted)">N/A</span>';
-        if (!u.is_fee_paid) return '<span class="badge badge-red">Unpaid</span>';
-        return `<span class="badge badge-green">Paid</span>`;
-    }
-
-    function feeBtn(u) {
-        if (u.role !== 'student') return '';
-        const action = u.is_fee_paid ? 'revoke' : 'pay';
-        const color = u.is_fee_paid ? 'btn-danger' : 'btn-success';
-        const title = u.is_fee_paid ? 'Revoke Fee Pass' : 'Mark as Paid';
-        const icon = u.is_fee_paid ? '❌' : '✅';
-        return `<button class="btn ${color} btn-sm btn-icon" onclick="setFee(${u.id}, '${action}')" title="${title}">${icon}</button>`;
-    }
 
     function renderTable() {
         document.getElementById('userCount').textContent = `${filteredUsers.length} users`;
@@ -152,12 +137,10 @@
             <td style="font-size:12px;">${u.reg_no || '—'}</td>
             <td>${roleBadge(u.role)}</td>
             <td style="font-size:12px;color:var(--text-secondary);">${busLabel(u.assigned_bus_id)}</td>
-            <td>${feeStatusBadge(u)}</td>
             <td style="font-size:12px;color:var(--text-muted);">${u.created_at}</td>
             <td>
                 <div style="display:flex;gap:6px;">
                     ${roleChangeBtn(u)}
-                    ${feeBtn(u)}
                     <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser(${u.id},'${u.name}')" title="Delete">🗑️</button>
                 </div>
             </td>
@@ -166,7 +149,7 @@
 
     function onRoleChange() {
         const role = document.getElementById('newRole').value;
-        document.getElementById('busAssignGroup').style.display = (role === 'incharge') ? 'block' : 'none';
+        document.getElementById('busAssignGroup').style.display = (role === 'incharge' || role === 'student') ? 'block' : 'none';
     }
 
     function openRoleModal(id, name, currentRole, currentBusId) {
@@ -206,16 +189,6 @@
         });
     }
 
-    async function setFee(id, action) {
-        if (!confirm(`Are you sure you want to mark this student as ${action === 'pay' ? 'Paid' : 'Unpaid'}?`)) return;
-        const res = await apiPut(`/api/users/${id}/fee`, { action: action });
-        if (res.ok) {
-            showToast('Fee status updated successfully', 'success');
-            load();
-        } else {
-            showToast(res.data.error || 'Failed to update fee', 'error');
-        }
-    }
 
     load();
 </script>

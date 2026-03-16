@@ -72,7 +72,7 @@ def index():
         if current_user.role == 'incharge':
             return redirect(url_for('incharge_dashboard'))
         return redirect(url_for('student_dashboard'))
-    return redirect(url_for('login'))
+    return render_template('index.html')
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -290,11 +290,6 @@ def api_me():
 @login_required
 def api_buses():
     buses = Bus.query.all()
-    # If student, only show 'regular' buses if they have paid the fee
-    if current_user.role == 'student':
-        if not current_user.is_fee_paid:
-            buses = [b for b in buses if b.bus_type == 'event']
-            
     return jsonify([b.to_dict() for b in buses])
 
 
@@ -343,11 +338,6 @@ def api_buses_delete(bid):
 @login_required
 def api_routes():
     routes = Route.query.all()
-    
-    # If student, only show routes for 'regular' buses if they have paid
-    if current_user.role == 'student' and not current_user.is_fee_paid:
-        routes = [r for r in routes if r.bus and r.bus.bus_type == 'event']
-        
     return jsonify([r.to_dict() for r in routes])
 
 
@@ -495,11 +485,6 @@ def api_timings():
     if bus_id:
         q = q.filter_by(bus_id=int(bus_id))
     timings = q.all()
-    
-    # If student, only show timings for 'regular' buses if they have paid
-    if current_user.role == 'student' and not current_user.is_fee_paid:
-        timings = [t for t in timings if t.bus and t.bus.bus_type == 'event']
-        
     return jsonify([t.to_dict() for t in timings])
 
 
@@ -844,19 +829,38 @@ def api_change_requests_action(cid):
 @app.route('/api/notifications', methods=['GET'])
 @login_required
 def api_notifications():
-    if current_user.role in ('admin', 'incharge'):
+    if current_user.role == 'admin':
+        # Admins see what they sent in the general API, and everything in /all
         notifs = Notification.query.filter_by(sender_id=current_user.id).order_by(Notification.created_at.desc()).all()
     else:
-        # Students see: all-student notifications + bus-specific ones targeting their incharge bus
-        notifs = Notification.query.filter(
-            Notification.target_bus_id == None
-        ).order_by(Notification.created_at.desc()).all()
+        # Students and Incharges see:
+        # 1. Notifications targeted at "All Students" (target_bus_id IS NULL)
+        # 2. Notifications targeted at their assigned bus
+        # 3. (Optional) Incharge might want to see what they sent too
+        
+        bus_id = current_user.assigned_bus_id
+        q = Notification.query.filter(
+            (Notification.target_bus_id == None) | 
+            (Notification.target_bus_id == bus_id)
+        )
+        
+        if current_user.role == 'incharge':
+            # Also include notifications they sent (in case they sent one to another bus or something, 
+            # though restricted by UI, it's good for consistency)
+            q = Notification.query.filter(
+                (Notification.target_bus_id == None) | 
+                (Notification.target_bus_id == bus_id) |
+                (Notification.sender_id == current_user.id)
+            )
+            
+        notifs = q.order_by(Notification.created_at.desc()).all()
+        
     return jsonify([n.to_dict() for n in notifs])
 
 
 @app.route('/api/notifications/all', methods=['GET'])
 @login_required
-@admin_required
+@incharge_required
 def api_notifications_all():
     notifs = Notification.query.order_by(Notification.created_at.desc()).all()
     return jsonify([n.to_dict() for n in notifs])
@@ -871,8 +875,6 @@ def api_notifications_create():
     if not data.get('title') or not data.get('message'):
         return jsonify({'error': 'Title and message are required'}), 400
     target_bus_id = data.get('target_bus_id') or None
-    if current_user.role == 'incharge' and not target_bus_id:
-        target_bus_id = current_user.assigned_bus_id
     n = Notification(
         title=data['title'],
         message=data['message'],
@@ -886,7 +888,7 @@ def api_notifications_create():
 
 @app.route('/api/notifications/<int:nid>', methods=['DELETE'])
 @login_required
-@admin_required
+@incharge_required
 def api_notifications_delete(nid):
     n = Notification.query.get_or_404(nid)
     db.session.delete(n)

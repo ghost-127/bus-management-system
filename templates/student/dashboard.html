@@ -360,20 +360,7 @@
     </div>
 </div>
 
-{% set is_paid = current_user.is_fee_paid %}
-{% if not is_paid %}
-<div
-    style="background:rgba(239,68,68,0.1); border:1px solid rgba(239,68,68,0.3); border-radius:12px; padding:16px; margin-bottom:24px; display:flex; gap:12px; align-items:flex-start;">
-    <div style="font-size:24px;">⚠️</div>
-    <div>
-        <h4 style="color:#f87171; margin:0 0 4px 0; font-size:15px;">Fee Payment Required</h4>
-        <p style="color:var(--text-secondary); margin:0; font-size:13px; line-height:1.4;">
-            Your bus fee pass has expired or is unpaid. You are currently only able to view and access <strong>Event
-                Buses</strong>. Please contact the administration to renew your regular bus pass.
-        </p>
-    </div>
-</div>
-{% endif %}
+
 
 <!-- Bento Grid -->
 <div class="bento">
