@@ -83,7 +83,7 @@
         <div class="bus-no-big">{{ bus.bus_no }}</div>
         <div class="bus-meta">Capacity: {{ bus.capacity }} seats</div>
         <div style="margin-top:8px;">
-            {{ statusBadge(bus.status) if statusBadge else '<span>'~bus.status~'</span>' }}
+            <span class="badge {{ 'badge-success' if bus.status == 'active' else 'badge-danger' if bus.status == 'inactive' else 'badge-blue' }}">{{ bus.status }}</span>
             <span id="liveStatusBadge"
                 style="margin-left:8px;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:700;"></span>
         </div>

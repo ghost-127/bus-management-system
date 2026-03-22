@@ -62,16 +62,16 @@
             </select>
         </div>
         <div class="form-group">
-            <label class="form-label">Day of Week *</label>
-            <select class="form-control" id="fDay">
-                <option>Monday</option>
-                <option>Tuesday</option>
-                <option>Wednesday</option>
-                <option>Thursday</option>
-                <option>Friday</option>
-                <option>Saturday</option>
-                <option>Sunday</option>
-            </select>
+            <label class="form-label">Days of Week *</label>
+            <div id="fDays" style="display:flex; flex-wrap:wrap; gap:12px; margin-top:4px;">
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Monday" style="margin-right:6px;"> Mon</label>
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Tuesday" style="margin-right:6px;"> Tue</label>
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Wednesday" style="margin-right:6px;"> Wed</label>
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Thursday" style="margin-right:6px;"> Thu</label>
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Friday" style="margin-right:6px;"> Fri</label>
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Saturday" style="margin-right:6px;"> Sat</label>
+                <label style="display:flex;align-items:center;cursor:pointer;"><input type="checkbox" name="day" value="Sunday" style="margin-right:6px;"> Sun</label>
+            </div>
         </div>
         <div class="form-row">
             <div class="form-group">
@@ -83,6 +83,7 @@
                 <input class="form-control" type="time" id="fArr">
             </div>
         </div>
+
         <div class="form-group">
             <label class="form-label">Notes</label>
             <input class="form-control" id="fNotes" placeholder="Optional notes">
@@ -148,7 +149,11 @@
 
     function openAddModal() {
         document.getElementById('modalTitle').textContent = 'Add Timing';
-        ['editId', 'fDep', 'fArr', 'fNotes'].forEach(id => document.getElementById(id).value = '');
+        ['editId', 'fDep', 'fArr', 'fNotes'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
+        });
+        document.querySelectorAll('input[name="day"]').forEach(c => c.checked = false);
         document.getElementById('fBus').value = document.getElementById('busFilter').value || '';
         openModal('timingModal');
     }
@@ -158,7 +163,7 @@
         document.getElementById('modalTitle').textContent = 'Edit Timing';
         document.getElementById('editId').value = t.id;
         document.getElementById('fBus').value = t.bus_id;
-        document.getElementById('fDay').value = t.day_of_week;
+        document.querySelectorAll('input[name="day"]').forEach(c => c.checked = (c.value === t.day_of_week));
         document.getElementById('fDep').value = t.departure_time;
         document.getElementById('fArr').value = t.arrival_time;
         document.getElementById('fNotes').value = t.notes || '';
@@ -167,16 +172,25 @@
 
     async function saveTiming() {
         const id = document.getElementById('editId').value;
+        
+        const selectedDays = Array.from(document.querySelectorAll('input[name="day"]:checked')).map(c => c.value);
+        if(selectedDays.length === 0) {
+            showToast('Please select at least one day', 'error'); return;
+        }
+
         const payload = {
             bus_id: document.getElementById('fBus').value,
-            day_of_week: document.getElementById('fDay').value,
+            days_of_week: selectedDays,
+            day_of_week: selectedDays[0], // fallback for edit
             departure_time: document.getElementById('fDep').value,
             arrival_time: document.getElementById('fArr').value,
             notes: document.getElementById('fNotes').value
         };
+
         if (!payload.bus_id || !payload.departure_time || !payload.arrival_time) {
             showToast('Please fill all required fields', 'error'); return;
         }
+        
         const res = id ? await apiPut(`/api/timings/${id}`, payload) : await apiPost('/api/timings', payload);
         if (res.ok) { showToast(id ? 'Timing updated!' : 'Timing added!', 'success'); closeModal('timingModal'); loadTimings(); }
         else showToast('Error saving timing', 'error');

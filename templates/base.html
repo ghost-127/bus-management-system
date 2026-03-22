@@ -257,6 +257,12 @@
             image-rendering: -webkit-optimize-contrast;
             image-rendering: high-quality;
         }
+        
+        /* Retain background photo in day mode */
+        [data-theme='light'] body {
+            background-image: linear-gradient(rgba(255, 255, 255, 0.80), rgba(240, 245, 255, 0.90)),
+            url("{{ url_for('static', filename='img/busmang.jpg') }}");
+        }
     </style>
     <div class="app-layout">
         <!-- Sidebar -->
@@ -370,6 +376,9 @@
                 {% if current_user.reg_no %}
                 <div class="reg-badge">Reg: {{ current_user.reg_no }}</div>
                 {% endif %}
+                <a href="{{ url_for('change_password') }}" class="logout-btn" style="margin-bottom: 8px; background: transparent; border: 1px solid var(--border); color: var(--text-primary);">
+                    <span>🔑</span> Change Password
+                </a>
                 <a href="{{ url_for('logout') }}" class="logout-btn">
                     <span>🚪</span> Logout
                 </a>

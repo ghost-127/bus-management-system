@@ -15,7 +15,6 @@ class User(UserMixin, db.Model):
     role = db.Column(db.String(20), default='student')  # 'student', 'admin', 'incharge'
     assigned_bus_id = db.Column(db.Integer, db.ForeignKey('buses.id'), nullable=True)  # for incharge and students
     reg_no = db.Column(db.String(50), nullable=True)
-    is_fee_paid = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def set_password(self, password):
@@ -32,7 +31,6 @@ class User(UserMixin, db.Model):
             'role': self.role,
             'reg_no': self.reg_no,
             'assigned_bus_id': self.assigned_bus_id,
-            'is_fee_paid': self.is_fee_paid,
             'created_at': self.created_at.strftime('%Y-%m-%d')
         }
 
@@ -75,6 +73,14 @@ class Bus(db.Model):
     def to_dict(self):
         driver_name = self.driver.name if self.driver else 'Unassigned'
         route_name = self.routes[0].name if self.routes else 'No Route'
+        
+        stop_names = []
+        if self.routes:
+            for r in self.routes:
+                for s in r.stops:
+                    if s.name not in stop_names:
+                        stop_names.append(s.name)
+                        
         return {
             'id': self.id,
             'bus_no': self.bus_no,
@@ -85,7 +91,8 @@ class Bus(db.Model):
             'current_stop_id': self.current_stop_id,
             'driver_id': self.driver_id,
             'driver_name': self.driver.name if self.driver else 'Unassigned',
-            'route_name': route_name
+            'route_name': route_name,
+            'stops': stop_names
         }
 
 

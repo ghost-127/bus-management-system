@@ -175,12 +175,36 @@ def reset_password(token):
     return render_template('reset_password.html', token=token, error=None)
 
 
+@app.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'POST':
+        data = request.get_json() or request.form
+        current_password = data.get('current_password', '')
+        new_password = data.get('new_password', '')
+        
+        if not current_user.check_password(current_password):
+            return jsonify({'success': False, 'message': 'Incorrect current password.'}), 400
+            
+        if len(new_password) < 6:
+            return jsonify({'success': False, 'message': 'New password must be at least 6 characters.'}), 400
+            
+        current_user.set_password(new_password)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Password successfully changed!'})
+        
+    return render_template('change_password.html')
+
+
 # ─────────────────────────── STUDENT PAGES ────────────────────────────
 
 @app.route('/student/dashboard')
 @login_required
 def student_dashboard():
-    return render_template('student/dashboard.html')
+    assigned_bus = None
+    if current_user.assigned_bus_id:
+        assigned_bus = Bus.query.get(current_user.assigned_bus_id)
+    return render_template('student/dashboard.html', assigned_bus=assigned_bus)
 
 
 @app.route('/student/buses')
@@ -389,6 +413,13 @@ def api_routes_create():
               start_point=data['start_point'], end_point=data['end_point'],
               distance_km=float(data.get('distance_km', 0)))
     db.session.add(r)
+    db.session.flush() # get generated id
+    
+    stop_start = Stop(name=data['start_point'], route_id=r.id, sequence=1)
+    stop_end = Stop(name=data['end_point'], route_id=r.id, sequence=2)
+    db.session.add(stop_start)
+    db.session.add(stop_end)
+    
     db.session.commit()
     return jsonify(r.to_dict()), 201
 
@@ -523,12 +554,19 @@ def api_timings():
 @admin_required
 def api_timings_create():
     data = request.get_json()
-    t = Timing(bus_id=int(data['bus_id']), day_of_week=data['day_of_week'],
-               departure_time=data['departure_time'], arrival_time=data['arrival_time'],
-               notes=data.get('notes', ''))
-    db.session.add(t)
+    days = data.get('days_of_week') or [data.get('day_of_week')]
+    created = []
+    
+    for day in days:
+        if not day: continue
+        t = Timing(bus_id=int(data['bus_id']), day_of_week=day,
+                   departure_time=data['departure_time'], arrival_time=data['arrival_time'],
+                   notes=data.get('notes', ''))
+        db.session.add(t)
+        created.append(t)
+            
     db.session.commit()
-    return jsonify(t.to_dict()), 201
+    return jsonify(created[0].to_dict() if created else {}), 201
 
 
 @app.route('/api/timings/<int:tid>', methods=['PUT'])
@@ -537,11 +575,43 @@ def api_timings_create():
 def api_timings_update(tid):
     t = Timing.query.get_or_404(tid)
     data = request.get_json()
+    
+    old_bus_id = t.bus_id
+    old_dep = t.departure_time
+
     t.bus_id = int(data.get('bus_id', t.bus_id))
-    t.day_of_week = data.get('day_of_week', t.day_of_week)
     t.departure_time = data.get('departure_time', t.departure_time)
     t.arrival_time = data.get('arrival_time', t.arrival_time)
     t.notes = data.get('notes', t.notes)
+    
+    selected_days = data.get('days_of_week')
+    if selected_days and isinstance(selected_days, list) and len(selected_days) > 0:
+        t.day_of_week = selected_days[0]
+        # check for existing records to update, or create new ones
+        for day in selected_days[1:]:
+            existing_t = Timing.query.filter(
+                Timing.bus_id.in_([old_bus_id, t.bus_id]),
+                Timing.day_of_week == day,
+                Timing.departure_time.in_([old_dep, t.departure_time])
+            ).first()
+            
+            if existing_t:
+                existing_t.bus_id = t.bus_id
+                existing_t.departure_time = t.departure_time
+                existing_t.arrival_time = t.arrival_time
+                existing_t.notes = t.notes
+            else:
+                new_t = Timing(
+                    bus_id=t.bus_id,
+                    day_of_week=day,
+                    departure_time=t.departure_time,
+                    arrival_time=t.arrival_time,
+                    notes=t.notes
+                )
+                db.session.add(new_t)
+    else:
+        t.day_of_week = data.get('day_of_week', t.day_of_week)
+
     db.session.commit()
     return jsonify(t.to_dict())
 
@@ -613,6 +683,34 @@ def api_users():
     return jsonify([u.to_dict() for u in users])
 
 
+@app.route('/api/users', methods=['POST'])
+@login_required
+@admin_required
+def api_users_create():
+    data = request.get_json()
+    
+    # Check if email exists
+    if User.query.filter_by(email=data.get('email')).first():
+        return jsonify({'error': 'Email already registered'}), 400
+        
+    u = User(
+        name=data.get('name'),
+        email=data.get('email'),
+        role=data.get('role', 'student'),
+        reg_no=data.get('reg_no') or None,
+        assigned_bus_id=int(data.get('assigned_bus_id')) if data.get('assigned_bus_id') else None
+    )
+    if data.get('password'):
+        u.set_password(data.get('password'))
+    else:
+        u.set_password('123456') # fallback
+        
+    db.session.add(u)
+    db.session.commit()
+    
+    return jsonify(u.to_dict()), 201
+
+
 @app.route('/api/users/<int:uid>/role', methods=['PUT'])
 @login_required
 @admin_required
@@ -627,24 +725,6 @@ def api_users_role(uid):
     db.session.commit()
     return jsonify(u.to_dict())
 
-
-@app.route('/api/users/<int:uid>/fee', methods=['PUT'])
-@login_required
-@admin_required
-def api_users_fee(uid):
-    u = User.query.get_or_404(uid)
-    data = request.get_json()
-    action = data.get('action')
-    
-    if action == 'pay':
-        u.is_fee_paid = True
-    elif action == 'revoke':
-        u.is_fee_paid = False
-    else:
-        return jsonify({'error': 'Invalid action'}), 400
-        
-    db.session.commit()
-    return jsonify(u.to_dict())
 
 
 @app.route('/api/users/<int:uid>', methods=['DELETE'])

@@ -11,15 +11,19 @@
                 <input type="text" placeholder="Search users…" id="searchInput"
                     oninput="filterTable('searchInput','userTbody')">
             </div>
-            <select class="form-control" id="roleFilter" onchange="filterRole()" style="max-width:150px;">
+            <select class="form-control" id="roleFilter" onchange="applyFilters()" style="max-width:150px;">
                 <option value="">All Roles</option>
                 <option value="student">Students</option>
                 <option value="admin">Admins</option>
                 <option value="incharge">Incharges</option>
             </select>
+            <select class="form-control" id="routeFilter" onchange="applyFilters()" style="max-width:180px;">
+                <option value="">All Routes</option>
+            </select>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
             <span id="userCount" class="badge badge-blue"></span>
+            <button class="btn btn-primary btn-sm" onclick="openAddUserModal()">➕ Add User</button>
         </div>
     </div>
     <div class="table-wrapper">
@@ -44,6 +48,53 @@
                 </tr>
             </tbody>
         </table>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal-backdrop" id="addUserModal" style="display:none;">
+    <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+            <h3 class="modal-title">Add New User</h3>
+            <button class="modal-close" onclick="closeModal('addUserModal')">✕</button>
+        </div>
+        <div style="padding:10px 0;">
+            <div class="form-group">
+                <label class="form-label">Name</label>
+                <input type="text" class="form-control" id="addName" placeholder="Full name">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Email</label>
+                <input type="email" class="form-control" id="addEmail" placeholder="user@college.edu">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Password</label>
+                <input type="password" class="form-control" id="addPassword" placeholder="Minimum 6 characters">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Role</label>
+                <select class="form-control" id="addRole" onchange="onAddUserRoleChange()">
+                    <option value="student" selected>Student</option>
+                    <option value="incharge">Bus Incharge</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group" id="addRegGroup">
+                <label class="form-label">Register Number</label>
+                <input type="text" class="form-control" id="addRegNo" placeholder="Optional">
+            </div>
+            <div class="form-group" id="addBusAssignGroup" style="display:none;margin-top:12px;">
+                <label class="form-label">Assign Bus</label>
+                <select class="form-control" id="addAssignedBus">
+                    <option value="">— No bus —</option>
+                </select>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:4px;">Required for Bus Incharge role</div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="closeModal('addUserModal')">Cancel</button>
+            <button class="btn btn-primary" onclick="submitNewUser()">Create User</button>
+        </div>
     </div>
 </div>
 
@@ -90,19 +141,49 @@
         [users, allBuses] = await Promise.all([apiGet('/api/users'), apiGet('/api/buses')]);
         // Populate bus dropdown
         const sel = document.getElementById('assignedBus');
+        const addSel = document.getElementById('addAssignedBus');
         allBuses.forEach(b => {
             const o = document.createElement('option');
             o.value = b.id; o.textContent = `${b.bus_no} — ${b.route_name}`;
             sel.appendChild(o);
+            
+            const o2 = document.createElement('option');
+            o2.value = b.id; o2.textContent = `${b.bus_no} — ${b.route_name}`;
+            addSel.appendChild(o2);
         });
+        
+        // Populate route dropdown
+        const rtSel = document.getElementById('routeFilter');
+        const uniqueRoutes = [...new Set(allBuses.map(b => b.route_name).filter(r => r && r !== 'No Route'))];
+        uniqueRoutes.forEach(r => {
+            const o = document.createElement('option');
+            o.value = r; o.textContent = r;
+            rtSel.appendChild(o);
+        });
+
         filteredUsers = users;
-        filterRole();
+        applyFilters();
     }
 
-    function filterRole() {
+    function applyFilters() {
         const role = document.getElementById('roleFilter').value;
-        filteredUsers = role ? users.filter(u => u.role === role) : users;
+        const route = document.getElementById('routeFilter').value;
+        
+        filteredUsers = users;
+        if (role) {
+            filteredUsers = filteredUsers.filter(u => u.role === role);
+        }
+        if (route) {
+            filteredUsers = filteredUsers.filter(u => {
+                if (!u.assigned_bus_id) return false;
+                const b = allBuses.find(x => x.id === u.assigned_bus_id);
+                return b && b.route_name === route;
+            });
+        }
         renderTable();
+        
+        // Re-apply existing text search immediately over redrawn table
+        filterTable('searchInput', 'userTbody');
     }
 
     function busLabel(busId) {
@@ -122,15 +203,18 @@
         if (!filteredUsers.length) {
             tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><span class="empty-state-icon">👥</span>No users found</div></td></tr>'; return;
         }
-        tbody.innerHTML = filteredUsers.map((u, i) => `
-        <tr>
-            <td>${i + 1}</td>
-            <td>
-                <div style="display:flex;align-items:center;gap:10px;">
-                    <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">
-                        ${u.name[0].toUpperCase()}
-                    </div>
-                    <strong>${u.name}</strong>
+        tbody.innerHTML = filteredUsers.map((u, i) => {
+            const b = u.assigned_bus_id ? allBuses.find(x => x.id === u.assigned_bus_id) : null;
+            const stopsStr = b && b.stops ? b.stops.join(', ') : '';
+            return `
+            <tr>
+                <td><span style="display:none;" class="search-stop-data">${stopsStr}</span>${i + 1}</td>
+                <td>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        <div style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--accent2));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;flex-shrink:0;">
+                            ${u.name[0].toUpperCase()}
+                        </div>
+                        <strong>${u.name}</strong>
                 </div>
             </td>
             <td style="font-size:12px;color:var(--text-muted);">${u.email}</td>
@@ -144,7 +228,54 @@
                     <button class="btn btn-danger btn-sm btn-icon" onclick="deleteUser(${u.id},'${u.name}')" title="Delete">🗑️</button>
                 </div>
             </td>
-        </tr>`).join('');
+            </tr>`;
+        }).join('');
+    }
+
+    function openAddUserModal() {
+        document.getElementById('addName').value = '';
+        document.getElementById('addEmail').value = '';
+        document.getElementById('addPassword').value = '';
+        document.getElementById('addRegNo').value = '';
+        document.getElementById('addRole').value = 'student';
+        document.getElementById('addAssignedBus').value = '';
+        onAddUserRoleChange();
+        openModal('addUserModal');
+    }
+
+    function onAddUserRoleChange() {
+        const role = document.getElementById('addRole').value;
+        document.getElementById('addRegGroup').style.display = (role === 'student') ? 'block' : 'none';
+        document.getElementById('addBusAssignGroup').style.display = (role === 'incharge' || role === 'student') ? 'block' : 'none';
+    }
+
+    async function submitNewUser() {
+        const payload = {
+            name: document.getElementById('addName').value,
+            email: document.getElementById('addEmail').value,
+            password: document.getElementById('addPassword').value,
+            role: document.getElementById('addRole').value,
+            reg_no: document.getElementById('addRegNo').value || null,
+            assigned_bus_id: document.getElementById('addAssignedBus').value || null
+        };
+        
+        if (!payload.name || !payload.email || !payload.password) {
+            showToast('Please fill out name, email, and password.', 'error');
+            return;
+        }
+        if (payload.role === 'incharge' && !payload.assigned_bus_id) {
+            showToast('Please assign a bus for Incharge role', 'error'); 
+            return;
+        }
+
+        const res = await apiPost('/api/users', payload);
+        if (res.ok) {
+            showToast('User created successfully!', 'success');
+            closeModal('addUserModal');
+            load();
+        } else {
+            showToast(res.data.error || 'Error creating user', 'error');
+        }
     }
 
     function onRoleChange() {

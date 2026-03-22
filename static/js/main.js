@@ -60,7 +60,8 @@ function filterTable(inputId, tableBodyId) {
 
 // ── API HELPERS ──────────────────────────────────────────────────
 async function apiGet(url) {
-    const res = await fetch(url);
+    const separator = url.includes('?') ? '&' : '?';
+    const res = await fetch(url + separator + '_t=' + Date.now(), { cache: 'no-store' });
     if (!res.ok) throw new Error('Request failed');
     return res.json();
 }

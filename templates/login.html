@@ -160,23 +160,6 @@
                     </a>
                 </div>
 
-                <div class="demo-creds">
-                    <div class="demo-creds-title">🎯 Demo Credentials</div>
-                    <div class="demo-cred-row">
-                        <span>👑 Admin: admin@college.edu / admin123</span>
-                        <button class="demo-fill-btn" onclick="fillDemo('admin@college.edu','admin123')">Fill</button>
-                    </div>
-                    <div class="demo-cred-row">
-                        <span>🚌 Incharge: incharge@college.edu / incharge123</span>
-                        <button class="demo-fill-btn"
-                            onclick="fillDemo('incharge@college.edu','incharge123')">Fill</button>
-                    </div>
-                    <div class="demo-cred-row">
-                        <span>🎓 Student: student@college.edu / student123</span>
-                        <button class="demo-fill-btn"
-                            onclick="fillDemo('student@college.edu','student123')">Fill</button>
-                    </div>
-                </div>
             </div>
 
             <!-- Register Form -->
@@ -220,10 +203,6 @@
         document.getElementById('registerError').style.display = 'none';
     }
 
-    function fillDemo(email, pass) {
-        document.getElementById('loginEmail').value = email;
-        document.getElementById('loginPassword').value = pass;
-    }
 
     async function doLogin() {
         const btn = document.getElementById('loginBtn');
