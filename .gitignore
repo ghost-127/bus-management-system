@@ -10,3 +10,4 @@ instance/
 *.db
 .vscode/
 .idea/
+email_config.py
